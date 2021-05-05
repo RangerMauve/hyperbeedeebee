@@ -51,7 +51,7 @@ class Collection {
     return doc
   }
 
-  async findOne (query={}) {
+  async findOne (query = {}) {
     const results = await (this.find(query).limit(1))
 
     const [doc] = results
@@ -59,14 +59,13 @@ class Collection {
     return doc
   }
 
-  find (query={}) {
+  find (query = {}) {
     return new Cursor(query, this.bee)
   }
 }
 
 class Cursor {
-  constructor (query={}, bee, opts = {
-    value: true,
+  constructor (query = {}, bee, opts = {
     limit: Infinity,
     skip: 0,
     sort: null
@@ -79,7 +78,7 @@ class Cursor {
 
   async count () {
     let count = 0
-    const cursor = new Cursor(this.query, this.bee, { ...this.opts, value: false })
+    const cursor = new Cursor(this.query, this.bee, { ...this.opts })
     for await (const item of cursor) { // eslint-disable-line
       count++
     }
@@ -144,23 +143,25 @@ class Cursor {
 
       let count = 0
       const {
-        limit,
-        value: shouldIncludeValue
+        limit
       } = this.opts
       let { skip = 0 } = this.opts
 
-      for await (const { key, value: rawDoc } of stream) {
-        count++
+      const checkKeys = Object.keys(this.query)
 
+      for await (const { value: rawDoc } of stream) {
         // TODO: Can we avoid iterating over keys that should be skipped?
         if (skip > 0) {
           skip--
         } else {
-          if (!shouldIncludeValue) {
-            const _id = docKeyToId(key, sep)
-            yield { _id }
-          } else {
-      const doc = BSON.deserialize(rawDoc)
+          count++
+          const doc = BSON.deserialize(rawDoc)
+
+          if (checkKeys.every((key) => {
+            const queryValue = this.query[key]
+            const docValue = doc[key]
+            return queryCompare(docValue, queryValue)
+          })) {
             yield doc
           }
         }
@@ -170,15 +171,49 @@ class Cursor {
   }
 }
 
-function docKeyToId (key, sep) {
-  const prefix = Buffer.concat([
-    DOC_PREFIX,
-    sep
-  ])
+function queryCompare (docValue, queryValue) {
+  if (typeof queryValue === 'object' && hasNumberCompare(queryValue)) {
+    return numberCompare(docValue, queryValue)
+  } else return isEqual(docValue, queryValue)
+}
 
-  const idBuffer = key.slice(prefix.length)
+function hasNumberCompare (queryValue) {
+  return ('$gt' in queryValue) || ('$gte' in queryValue) || ('$lt' in queryValue) || ('$lte' in queryValue)
+}
 
-  return new ObjectID(idBuffer)
+function numberCompare (docValue, queryValue) {
+  let matches = true
+  // If it's a date, get it's millisecond value for comparison
+  const compareValue = ensureComparable(docValue)
+  if ('$gt' in queryValue) {
+    if (!(compareValue > ensureComparable(queryValue.$gt))) matches = false
+  }
+  if ('$gte' in ensureComparable(queryValue)) {
+    if (!(compareValue >= ensureComparable(queryValue.$gte))) matches = false
+  }
+  if ('$lt' in queryValue) {
+    if (!(compareValue < ensureComparable(queryValue.$lt))) matches = false
+  }
+  if ('$lte' in queryValue) {
+    if (!(compareValue <= queryValue.$lte)) matches = false
+  }
+  return matches
+}
+
+function ensureComparable (value) {
+  if (value instanceof Date) return value.getTime()
+  return value
+}
+
+function isEqual (docValue, queryValue) {
+  if (Array.isArray(docValue)) {
+    return docValue
+      .some((item) => isEqual(item, queryValue))
+  } else if (typeof docValue.equals === 'function') {
+    return docValue.equals(queryValue)
+  } else {
+    return queryValue === docValue
+  }
 }
 
 function docIdToKey (objectId, sep) {
