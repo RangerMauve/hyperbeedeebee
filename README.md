@@ -5,6 +5,58 @@ A MongoDB-like database built on top of Hyperbee with support for indexing
 
 Based on [this design](https://gist.github.com/RangerMauve/ae271204054b62d9a649d70b7d218191)
 
+## Usage
+
+```
+npm i --save hyperbeedeebee
+```
+
+```JavaScript
+const Hyperbee = require('hyperbee')
+// This module handles networking and storage of hypercores for you
+const SDK = require('hyper-sdk')
+const {DB} = require('hyperbeedeebee')
+
+const {Hypercore} = await SDK()
+
+// Initialize a hypercore for loading data
+const core = new Hypercore('example')
+// Initialize the Hyperbee you want to use for storing data and indexes
+const bee = new Hyperbee(core)
+
+// Create a new DB
+const db = new DB(bee)
+
+// Open up a collection of documents and insert a new document
+const doc = await db.collection('example').insert({
+  hello: 'Wrold!'
+})
+
+// doc._id gets set to an ObjectId if you don't specify it
+console.log(doc)
+
+// Iterate through data as it's loaded (streaming)
+// Usually faster and more memory / CPU efficient
+for await (let doc of db.collection('example').find({
+  clout: {
+$gt: 9000
+  },
+})) {
+  console.log(doc)
+}
+
+// Get all results in an array
+// Can skip some results and limit total for pagination
+const killbots = await db.collection('example')
+  .find({type: 'killbot'})
+  .skip(30)
+  .limit(100)
+
+// Get a single document that matches the query
+const eggbert = await db.collection('example').findOne({name: 'Eggbert'})
+```
+
+
 ## Data Types
 
 HyperbeeDeeBee uses MongoDB's [BSON](https://github.com/mongodb/js-bson) data types for encoding data.
