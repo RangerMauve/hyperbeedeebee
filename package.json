@@ -1,6 +1,6 @@
 {
   "name": "hyperbeedeebee",
-  "version": "1.0.0-0",
+  "version": "1.0.0-1",
   "description": "A MongoDB-like database built on top of Hyperbee with support for indexing",
   "main": "index.js",
   "scripts": {
