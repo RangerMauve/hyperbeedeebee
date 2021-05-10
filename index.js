@@ -78,8 +78,8 @@ class Cursor {
 
   async count () {
     let count = 0
-    const cursor = new Cursor(this.query, this.bee, { ...this.opts })
-    for await (const item of cursor) { // eslint-disable-line
+    // Item isn't being used but eslint will complain about it
+    for await (const item of this) { // eslint-disable-line
       count++
     }
 
@@ -104,7 +104,7 @@ class Cursor {
       for await (const item of this) {
         results.push(item)
       }
-      resolve(results)
+      return Promise.resolve(resolve(results))
     } catch (e) {
       reject(e)
     }
@@ -114,8 +114,8 @@ class Cursor {
     const { sep } = this.bee
 
     if (this.query._id) {
-    // Doc IDs are unique, so we can query against them
-    // TODO: Check other criteria in the doc even if we find by ID
+      // Doc IDs are unique, so we can query against them
+      // TODO: Check other criteria in the doc even if we find by ID
       const key = docIdToKey(this.query._id, sep)
       // TODO: Throw on not found?
       const { value: rawDoc } = await this.bee.get(key)
@@ -154,7 +154,6 @@ class Cursor {
         if (skip > 0) {
           skip--
         } else {
-          count++
           const doc = BSON.deserialize(rawDoc)
 
           if (checkKeys.every((key) => {
@@ -162,42 +161,94 @@ class Cursor {
             const docValue = doc[key]
             return queryCompare(docValue, queryValue)
           })) {
+            count++
             yield doc
+            if (count >= limit) break
           }
         }
-        if (count >= limit) break
       }
     }
   }
 }
 
 function queryCompare (docValue, queryValue) {
-  if (typeof queryValue === 'object' && hasNumberCompare(queryValue)) {
-    return numberCompare(docValue, queryValue)
+  if (typeof queryValue === 'object') {
+    if (hasNumberCompare(queryValue)) {
+      if (!numberCompare(docValue, queryValue)) return false
+    }
+    if (hasExists(queryValue)) {
+      if (docValue === undefined) return false
+    }
+    if (hasEq(queryValue)) {
+      if (!isEqual(docValue, queryValue.$eq)) return false
+    }
+    if (hasAll(queryValue)) {
+      if (!allCompare(docValue, queryValue)) return false
+    }
+    if (hasIn(queryValue)) {
+      if (!inCompare(docValue, queryValue)) return false
+    }
+    return true
   } else return isEqual(docValue, queryValue)
+}
+
+function hasEq (queryValue) {
+  return '$eq' in queryValue
+}
+
+function hasExists (queryValue) {
+  return '$exists' in queryValue
 }
 
 function hasNumberCompare (queryValue) {
   return ('$gt' in queryValue) || ('$gte' in queryValue) || ('$lt' in queryValue) || ('$lte' in queryValue)
 }
 
+function hasAll (queryValue) {
+  return '$all' in queryValue
+}
+
+function hasIn (queryValue) {
+  return '$in' in queryValue
+}
+
+function allCompare (docValue, queryValue) {
+  const all = queryValue.$all
+  // TODO: Add query validator function to detect this early.
+  if (!Array.isArray(all)) throw new Error('$all must be set to an array')
+  if (Array.isArray(docValue)) {
+    return all.every((fromQuery) => docValue.some((fromDoc) => isEqual(fromDoc, fromQuery)))
+  } else {
+    return false
+  }
+}
+
+function inCompare (docValue, queryValue) {
+  // TODO: Add query validator function to detect this early.
+  if (!Array.isArray(queryValue.$in)) throw new Error('$in must be set to an array')
+  if (Array.isArray(docValue)) {
+    return docValue.some((fromDoc) => queryValue.$in.some((fromQuery) => isEqual(fromDoc, fromQuery)))
+  } else {
+    return queryValue.$in.some((fromQuery) => isEqual(docValue, fromQuery))
+  }
+}
+
 function numberCompare (docValue, queryValue) {
-  let matches = true
   // If it's a date, get it's millisecond value for comparison
   const compareValue = ensureComparable(docValue)
   if ('$gt' in queryValue) {
-    if (!(compareValue > ensureComparable(queryValue.$gt))) matches = false
+    if (!(compareValue > ensureComparable(queryValue.$gt))) return false
   }
   if ('$gte' in ensureComparable(queryValue)) {
-    if (!(compareValue >= ensureComparable(queryValue.$gte))) matches = false
+    if (!(compareValue >= ensureComparable(queryValue.$gte))) return false
   }
   if ('$lt' in queryValue) {
-    if (!(compareValue < ensureComparable(queryValue.$lt))) matches = false
+    if (!(compareValue < ensureComparable(queryValue.$lt))) return false
   }
   if ('$lte' in queryValue) {
-    if (!(compareValue <= queryValue.$lte)) matches = false
+    if (!(compareValue <= queryValue.$lte)) return false
   }
-  return matches
+  return true
 }
 
 function ensureComparable (value) {

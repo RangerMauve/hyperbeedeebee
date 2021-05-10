@@ -106,6 +106,7 @@ Timestamp
 - [ ] Choose best index (hint API?)
 - [ ] Find on fields that aren't indexed
 - [ ] Test if iterators clean up properly
+- [ ] Detect when data isn't available from peers and emit an error of some sort instead of waiting indefinately.
 
 ## Important Differences From MongoDB
 
