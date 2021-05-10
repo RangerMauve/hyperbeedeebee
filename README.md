@@ -97,6 +97,8 @@ Timestamp
 - [x] Find by number field `$gt`/`$gte`/`$lt`/`$lte`
   - [x] Numbers
   - [x] Dates
+- [x] Find using $in operator
+- [x] Find using $all operator
 - [ ] Index fields (must specify BSON type, rebuild?)
 - [ ] Flatten array for indexes
 - [ ] Sort by index (with find)
