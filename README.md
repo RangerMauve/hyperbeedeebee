@@ -97,14 +97,18 @@ Timestamp
 - [x] Find by number field `$gt`/`$gte`/`$lt`/`$lte`
   - [x] Numbers
   - [x] Dates
-- [x] Find using $in operator
-- [x] Find using $all operator
+- [x] Find using `$in` operator
+- [x] Find using `$all` operator
+- [x] Find using `$exists` operator
 - [ ] Index fields (must specify BSON type, rebuild?)
-- [ ] Flatten array for indexes
 - [ ] Sort by index (with find)
-- [ ] Indexed find by field (only allow find for indexed fields)
+- [ ] Flatten array for indexes
+- [ ] Indexed find by field `$eq` (only allow find for indexed fields)
+- [ ] Indexed find for `$exists`
 - [ ] Indexed find by number field (only allow find for indexed fields)
 - [ ] Get field values from index key without getting the doc
+- [ ] Indexed find for `$in`
+- [ ] Indexed find for `$all`
 - [ ] Choose best index (hint API?)
 - [ ] Find on fields that aren't indexed
 - [ ] Test if iterators clean up properly

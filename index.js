@@ -39,6 +39,8 @@ class Collection {
     this.name = name
     this.bee = bee
     this.docs = bee.sub('doc')
+    this.idxs = bee.sub('idxs')
+    this.idx = bee.sub('idx')
   }
 
   async insert (rawDoc) {
@@ -57,6 +59,15 @@ class Collection {
 
     await this.docs.put(key, value)
 
+    const indexes = await this.listIndexes()
+
+    for (const { fields, name } of indexes) {
+      // TODO: Cache index subs
+      const bee = this.idx.sub(name)
+
+      await this._indexDocument(bee, fields, doc)
+    }
+
     return doc
   }
 
@@ -70,6 +81,65 @@ class Collection {
 
   find (query = {}) {
     return new Cursor(query, this)
+  }
+
+  async createIndex (fields, { rebuild = false, ...opts } = {}) {
+    const name = fields.join(',')
+    const exists = await this.indexExists(name)
+    // Don't rebuild index if it's already set
+    if (exists && !rebuild) {
+      return
+    }
+
+    const index = {
+      name,
+      fields,
+      opts
+    }
+
+    await this.idxs.put(name, BSON.serialize(index))
+
+    await this.reIndex(name)
+  }
+
+  async indexExists (name) {
+    const exists = await this.idxs.get(name)
+    return exists !== null
+  }
+
+  async getIndex (name) {
+    const data = await this.idxs.get(name)
+    if (!data) throw new Error('Invalid index')
+    return BSON.deserialize(data.value)
+  }
+
+  async reIndex (name) {
+    const { fields } = await this.getIndex(name)
+    // TODO: Cache index subs
+    const bee = this.idx.sub(name)
+
+    for await (const doc of this.find()) {
+      await this._indexDocument(bee, fields, doc)
+    }
+  }
+
+  async _indexDocument (bee, fields, doc) {
+    if (!hasFields(doc, fields)) return
+    const idxKey = makeIndexKey(doc, fields)
+    await bee.put(idxKey, BSON.serialize(doc._id))
+  }
+
+  // TODO: Cache indexes?
+  async listIndexes () {
+    const stream = this.idxs.createReadStream()
+    const indexes = []
+
+    for await (const { value } of stream) {
+      const index = BSON.deserialize(value)
+      indexes.push(index)
+    }
+
+    return indexes
   }
 }
 
@@ -235,6 +305,20 @@ function compareEq (docValue, queryValue) {
 
 function compareExists (docValue, queryValue) {
   return (docValue !== undefined) === queryValue
+}
+
+function hasFields (doc, fields) {
+  return fields.every((field) => (field in doc) && (field !== undefined))
+}
+
+function makeIndexKey (doc, fields) {
+  // Serialize the data into a BSON array
+  return BSON.serialize(
+    // Take all the indexed fields
+    fields.map((field) => doc[field])
+    // Add the document ID
+      .concat(doc._id)
+  )
 }
 
 module.exports = {

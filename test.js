@@ -200,3 +200,26 @@ test('Search using $in and $all', async (t) => {
     await db.close()
   }
 })
+
+test('Create indexes and list them', async (t) => {
+  const db = new DB(getBee())
+  try {
+    await db.collection('example').insert({ example: 1, createdAt: new Date() })
+
+    await db.collection('example').createIndex(['createdAt', 'example'])
+
+    const indexes = await db.collection('example').listIndexes()
+
+    t.equal(indexes.length, 1, 'Got one index')
+    t.deepEqual(indexes[0].fields, ['createdAt', 'example'], 'Index containes expected fields')
+    t.equal(indexes[0].name, ['createdAt', 'example'].join(','), 'Index generated expected name')
+
+    await db.collection('example').insert({ example: 2, createdAt: new Date() })
+
+    t.ok('Able to insert document with index')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
