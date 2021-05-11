@@ -174,29 +174,29 @@ test('Search using $in and $all', async (t) => {
   const db = new DB(getBee())
 
   try {
-    await db.collection('example').insert({ example: [1,3,5,7,9] })
-    await db.collection('example').insert({ example: [2,3,6,8,10] })
-    await db.collection('example').insert({ example: 1})
-    await db.collection('example').insert({ example: 2})
+    await db.collection('example').insert({ example: [1, 3, 5, 7, 9] })
+    await db.collection('example').insert({ example: [2, 3, 6, 8, 10] })
+    await db.collection('example').insert({ example: 1 })
+    await db.collection('example').insert({ example: 2 })
 
     const found1 = await db.collection('example').find({
-			example: {
-				$in: [1,3,8]
-			}
+      example: {
+        $in: [1, 3, 8]
+      }
     })
 
     t.equal(found1.length, 3, 'Found 3 matching documents')
 
     const found2 = await db.collection('example').find({
-			example: {
-				$all: [2,6,8]
-			}
+      example: {
+        $all: [2, 6, 8]
+      }
     })
 
     t.equal(found2.length, 1, 'Found 1 matching document')
 
-		t.end()
+    t.end()
   } finally {
-		await db.close()
+    await db.close()
   }
 })

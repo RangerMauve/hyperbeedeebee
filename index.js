@@ -1,8 +1,16 @@
 const BSON = require('bson')
 const { ObjectID } = BSON
 
-const DOC_PREFIX = Buffer.from('doc', 'utf8')
-const END = Buffer.from([0xff])
+const QUERY_TYPES = {
+  $gt: compareGt,
+  $lt: compareLt,
+  $gte: compareGte,
+  $lte: compareLte,
+  $in: compareIn,
+  $all: compareAll,
+  $eq: compareEq,
+  $exists: compareExists
+}
 
 class DB {
   constructor (bee) {
@@ -30,6 +38,7 @@ class Collection {
   constructor (name, bee) {
     this.name = name
     this.bee = bee
+    this.docs = bee.sub('doc')
   }
 
   async insert (rawDoc) {
@@ -41,12 +50,12 @@ class Collection {
         _id: new ObjectID()
       }
     }
-    const { sep } = this.bee
 
-    const key = docIdToKey(doc._id, sep)
+    // Get _id as buffer
+    const key = doc._id.id
     const value = BSON.serialize(doc)
 
-    await this.bee.put(key, value)
+    await this.docs.put(key, value)
 
     return doc
   }
@@ -60,18 +69,18 @@ class Collection {
   }
 
   find (query = {}) {
-    return new Cursor(query, this.bee)
+    return new Cursor(query, this)
   }
 }
 
 class Cursor {
-  constructor (query = {}, bee, opts = {
+  constructor (query = {}, collection, opts = {
     limit: Infinity,
     skip: 0,
     sort: null
   }) {
     this.query = query
-    this.bee = bee
+    this.collection = collection
     // TODO: Validate opts
     this.opts = opts
   }
@@ -87,15 +96,15 @@ class Cursor {
   }
 
   limit (limit) {
-    return new Cursor(this.query, this.bee, { ...this.opts, limit })
+    return new Cursor(this.query, this.collection, { ...this.opts, limit })
   }
 
   skip (skip) {
-    return new Cursor(this.query, this.bee, { ...this.opts, skip })
+    return new Cursor(this.query, this.collection, { ...this.opts, skip })
   }
 
   sort (sort) {
-    return new Cursor(this.query, this.bee, { ...this.opts, sort })
+    return new Cursor(this.query, this.collection, { ...this.opts, sort })
   }
 
   async then (resolve, reject) {
@@ -111,35 +120,21 @@ class Cursor {
   }
 
   async * [Symbol.asyncIterator] () {
-    const { sep } = this.bee
-
     if (this.query._id) {
-      // Doc IDs are unique, so we can query against them
-      // TODO: Check other criteria in the doc even if we find by ID
-      const key = docIdToKey(this.query._id, sep)
-      // TODO: Throw on not found?
-      const { value: rawDoc } = await this.bee.get(key)
+      // Doc IDs are unique, so we can query against them without doing a search
+      const key = this.query._id.id
+      const { value: rawDoc } = await this.collection.docs.get(key)
       if (!rawDoc) {
-        yield null
-        return
+        throw new Error('not found')
       }
       const doc = BSON.deserialize(rawDoc)
+      if (!matchesQuery(doc, this.query)) {
+        throw new Error('not found')
+      }
       yield doc
     } else {
-      const start = Buffer.concat([
-        DOC_PREFIX,
-        sep
-      ])
-      const end = Buffer.concat([
-        DOC_PREFIX,
-        END
-      ])
-
-      // TODO: Account for order
-      const stream = this.bee.createReadStream({
-        gt: start,
-        lt: end
-      })
+      // Iterate through all the docs to perform a search on them
+      const stream = this.collection.docs.createReadStream()
 
       let count = 0
       const {
@@ -147,20 +142,14 @@ class Cursor {
       } = this.opts
       let { skip = 0 } = this.opts
 
-      const checkKeys = Object.keys(this.query)
-
       for await (const { value: rawDoc } of stream) {
         // TODO: Can we avoid iterating over keys that should be skipped?
-        if (skip > 0) {
-          skip--
-        } else {
-          const doc = BSON.deserialize(rawDoc)
+        const doc = BSON.deserialize(rawDoc)
 
-          if (checkKeys.every((key) => {
-            const queryValue = this.query[key]
-            const docValue = doc[key]
-            return queryCompare(docValue, queryValue)
-          })) {
+        if (matchesQuery(doc, this.query)) {
+          if (skip > 0) {
+            skip--
+          } else {
             count++
             yield doc
             if (count >= limit) break
@@ -171,84 +160,61 @@ class Cursor {
   }
 }
 
+function matchesQuery (doc, query) {
+  for (const key in query) {
+    const queryValue = query[key]
+    const docValue = doc[key]
+    if (!queryCompare(docValue, queryValue)) return false
+  }
+  return true
+}
+
 function queryCompare (docValue, queryValue) {
   if (typeof queryValue === 'object') {
-    if (hasNumberCompare(queryValue)) {
-      if (!numberCompare(docValue, queryValue)) return false
-    }
-    if (hasExists(queryValue)) {
-      if (docValue === undefined) return false
-    }
-    if (hasEq(queryValue)) {
-      if (!isEqual(docValue, queryValue.$eq)) return false
-    }
-    if (hasAll(queryValue)) {
-      if (!allCompare(docValue, queryValue)) return false
-    }
-    if (hasIn(queryValue)) {
-      if (!inCompare(docValue, queryValue)) return false
+    for (const queryType of Object.keys(queryValue)) {
+      const compare = QUERY_TYPES[queryType]
+      // TODO: Validate somewhere else?
+      if (!compare) throw new Error('Invalid Query Type ' + queryType)
+      if (!compare(docValue, queryValue[queryType])) return false
     }
     return true
-  } else return isEqual(docValue, queryValue)
+  } else return compareEq(docValue, queryValue)
 }
 
-function hasEq (queryValue) {
-  return '$eq' in queryValue
-}
-
-function hasExists (queryValue) {
-  return '$exists' in queryValue
-}
-
-function hasNumberCompare (queryValue) {
-  return ('$gt' in queryValue) || ('$gte' in queryValue) || ('$lt' in queryValue) || ('$lte' in queryValue)
-}
-
-function hasAll (queryValue) {
-  return '$all' in queryValue
-}
-
-function hasIn (queryValue) {
-  return '$in' in queryValue
-}
-
-function allCompare (docValue, queryValue) {
-  const all = queryValue.$all
+function compareAll (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(all)) throw new Error('$all must be set to an array')
+  if (!Array.isArray(queryValue)) throw new Error('$all must be set to an array')
   if (Array.isArray(docValue)) {
-    return all.every((fromQuery) => docValue.some((fromDoc) => isEqual(fromDoc, fromQuery)))
+    return queryValue.every((fromQuery) => docValue.some((fromDoc) => compareEq(fromDoc, fromQuery)))
   } else {
     return false
   }
 }
 
-function inCompare (docValue, queryValue) {
+function compareIn (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(queryValue.$in)) throw new Error('$in must be set to an array')
+  if (!Array.isArray(queryValue)) throw new Error('$in must be set to an array')
   if (Array.isArray(docValue)) {
-    return docValue.some((fromDoc) => queryValue.$in.some((fromQuery) => isEqual(fromDoc, fromQuery)))
+    return docValue.some((fromDoc) => queryValue.some((fromQuery) => compareEq(fromDoc, fromQuery)))
   } else {
-    return queryValue.$in.some((fromQuery) => isEqual(docValue, fromQuery))
+    return queryValue.some((fromQuery) => compareEq(docValue, fromQuery))
   }
 }
 
-function numberCompare (docValue, queryValue) {
-  // If it's a date, get it's millisecond value for comparison
-  const compareValue = ensureComparable(docValue)
-  if ('$gt' in queryValue) {
-    if (!(compareValue > ensureComparable(queryValue.$gt))) return false
-  }
-  if ('$gte' in ensureComparable(queryValue)) {
-    if (!(compareValue >= ensureComparable(queryValue.$gte))) return false
-  }
-  if ('$lt' in queryValue) {
-    if (!(compareValue < ensureComparable(queryValue.$lt))) return false
-  }
-  if ('$lte' in queryValue) {
-    if (!(compareValue <= queryValue.$lte)) return false
-  }
-  return true
+function compareGt (docValue, queryValue) {
+  return ensureComparable(docValue) > ensureComparable(queryValue)
+}
+
+function compareLt (docValue, queryValue) {
+  return ensureComparable(docValue) < ensureComparable(queryValue)
+}
+
+function compareGte (docValue, queryValue) {
+  return ensureComparable(docValue) >= ensureComparable(queryValue)
+}
+
+function compareLte (docValue, queryValue) {
+  return ensureComparable(docValue) <= ensureComparable(queryValue)
 }
 
 function ensureComparable (value) {
@@ -256,10 +222,10 @@ function ensureComparable (value) {
   return value
 }
 
-function isEqual (docValue, queryValue) {
+function compareEq (docValue, queryValue) {
   if (Array.isArray(docValue)) {
     return docValue
-      .some((item) => isEqual(item, queryValue))
+      .some((item) => compareEq(item, queryValue))
   } else if (typeof docValue.equals === 'function') {
     return docValue.equals(queryValue)
   } else {
@@ -267,15 +233,8 @@ function isEqual (docValue, queryValue) {
   }
 }
 
-function docIdToKey (objectId, sep) {
-  const idBuffer = objectId.id
-
-  const key = Buffer.concat([
-    DOC_PREFIX,
-    sep,
-    idBuffer
-  ])
-  return key
+function compareExists (docValue, queryValue) {
+  return (docValue !== undefined) === queryValue
 }
 
 module.exports = {
