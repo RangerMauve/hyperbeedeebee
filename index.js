@@ -1,6 +1,11 @@
 const BSON = require('bson')
 const { ObjectID } = BSON
 
+// Version of the indexing algorithm
+// Will be incremented for breaking changes
+// In the future we'll want to support multiple versions?
+const INDEX_VERSION = '1.0'
+
 const QUERY_TYPES = {
   $gt: compareGt,
   $lt: compareLt,
@@ -92,6 +97,7 @@ class Collection {
     }
 
     const index = {
+      version: INDEX_VERSION,
       name,
       fields,
       opts
@@ -123,10 +129,12 @@ class Collection {
     }
   }
 
+  // This is a private API
   async _indexDocument (bee, fields, doc) {
     if (!hasFields(doc, fields)) return
     const idxKey = makeIndexKey(doc, fields)
-    await bee.put(idxKey, BSON.serialize(doc._id))
+    const idxValue = doc._id.id
+    await bee.put(idxKey, idxValue)
   }
 
   // TODO: Cache indexes?
@@ -140,6 +148,19 @@ class Collection {
     }
 
     return indexes
+  }
+
+  // This is a private API
+  async _getSortIndexForField (field) {
+    const indexes = await this.listIndexes()
+    const applicableIndexes = indexes
+    // Get only indexes that contain this field
+      .filter(({ fields }) => fields[0] === field)
+    // Sort by fewest indexed fields
+      .sort((a, b) => a.fields.length - b.fields.length)
+
+    // Return the index with the fewest fields (reduce false negatives)
+    return applicableIndexes[0]
   }
 }
 
@@ -173,8 +194,14 @@ class Cursor {
     return new Cursor(this.query, this.collection, { ...this.opts, skip })
   }
 
-  sort (sort) {
-    return new Cursor(this.query, this.collection, { ...this.opts, sort })
+  sort (field, direction = 1) {
+    return new Cursor(this.query, this.collection, {
+      ...this.opts,
+      sort: {
+        field,
+        direction
+      }
+    })
   }
 
   async then (resolve, reject) {
@@ -203,26 +230,57 @@ class Cursor {
       }
       yield doc
     } else {
-      // Iterate through all the docs to perform a search on them
-      const stream = this.collection.docs.createReadStream()
+      const {
+        limit = Infinity,
+        skip = 0,
+        sort
+      } = this.opts
 
       let count = 0
-      const {
-        limit
-      } = this.opts
-      let { skip = 0 } = this.opts
+      let skipped = 0
+      const toSkip = skip
 
-      for await (const { value: rawDoc } of stream) {
+      let stream = null
+      // If we aren't sorting, sort over all docs
+      if (sort === null) {
+        stream = this.collection.docs.createReadStream()
+
+        for await (const { value: rawDoc } of stream) {
         // TODO: Can we avoid iterating over keys that should be skipped?
-        const doc = BSON.deserialize(rawDoc)
+          const doc = BSON.deserialize(rawDoc)
 
-        if (matchesQuery(doc, this.query)) {
-          if (skip > 0) {
-            skip--
-          } else {
-            count++
-            yield doc
-            if (count >= limit) break
+          if (matchesQuery(doc, this.query)) {
+            if (toSkip > skipped) {
+              skipped++
+            } else {
+              count++
+              yield doc
+              if (count >= limit) break
+            }
+          }
+        }
+      } else {
+        const index = await this.collection._getSortIndexForField(sort.field)
+
+        if (!index) throw new Error(`No indexes found to sort for field "${sort.field}"`)
+
+        const stream = this.collection.idx.sub(index.name).createReadStream({
+          reverse: (sort.direction === -1)
+        })
+
+        for await (const { value: rawId } of stream) {
+          const {value: rawDoc} = await this.collection.docs.get(rawId)
+          const doc = BSON.deserialize(rawDoc)
+
+          // TODO: Deduplicate this bit?
+          if (matchesQuery(doc, this.query)) {
+            if (toSkip > skipped) {
+              skipped++
+            } else {
+              count++
+              yield doc
+              if (count >= limit) break
+            }
           }
         }
       }

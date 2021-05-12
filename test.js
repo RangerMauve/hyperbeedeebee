@@ -223,3 +223,42 @@ test('Create indexes and list them', async (t) => {
     await db.close()
   }
 })
+
+test('Sort by index', async (t) => {
+  const db = new DB(getBee())
+  try {
+    await db.collection('example').createIndex(['createdAt'])
+
+    await db.collection('example').insert({ example: 1, createdAt: new Date() })
+    await db.collection('example').insert({ example: 2, createdAt: new Date() })
+    await db.collection('example').insert({ example: 3, createdAt: new Date() })
+
+    let counter = 3
+    for await (const { example } of db.collection('example').find().sort('createdAt', -1)) {
+      t.equal(example, counter, 'Got doc in expected order')
+      counter--
+    }
+
+    t.equal(counter, 0, 'Sorted through all 3 documents')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Cannot sort without index', async (t) => {
+    const db = new DB(getBee())
+    try {
+
+		try {
+			await db.collection('example').find().sort('notfound')
+		} catch {
+      t.pass('Threw error when sorting without index')
+		}
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})

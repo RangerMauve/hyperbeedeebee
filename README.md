@@ -100,8 +100,8 @@ Timestamp
 - [x] Find using `$in` operator
 - [x] Find using `$all` operator
 - [x] Find using `$exists` operator
-- [ ] Index fields (must specify BSON type, rebuild?)
-- [ ] Sort by index (with find)
+- [x] Index fields
+- [x] Sort by index (with find)
 - [ ] Flatten array for indexes
 - [ ] Indexed find by field `$eq` (only allow find for indexed fields)
 - [ ] Indexed find for `$exists`
