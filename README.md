@@ -1,7 +1,7 @@
 # hyperbeedeebee
 A MongoDB-like database built on top of Hyperbee with support for indexing
 
-**WIP**
+**WIP:** There may be breaking changes in the indexing before the v1.0.0 release, don't use this for anything you don't mind migrating in the future.
 
 Based on [this design](https://gist.github.com/RangerMauve/ae271204054b62d9a649d70b7d218191)
 
@@ -29,7 +29,7 @@ const db = new DB(bee)
 
 // Open up a collection of documents and insert a new document
 const doc = await db.collection('example').insert({
-  hello: 'Wrold!'
+  hello: 'World!'
 })
 
 // doc._id gets set to an ObjectId if you don't specify it
@@ -39,23 +39,27 @@ console.log(doc)
 // Usually faster and more memory / CPU efficient
 for await (let doc of db.collection('example').find({
   clout: {
-$gt: 9000
+    $gt: 9000
   },
 })) {
   console.log(doc)
 }
 
+// Create an index for properties in documents
+// This drastically speeds up queries and is necessary for sorting by fields
+await db.collection('example').createIndex('createdAt')
+
 // Get all results in an array
 // Can skip some results and limit total for pagination
 const killbots = await db.collection('example')
   .find({type: 'killbot'})
+  .sort('createdAt', -1)
   .skip(30)
   .limit(100)
 
 // Get a single document that matches the query
 const eggbert = await db.collection('example').findOne({name: 'Eggbert'})
 ```
-
 
 ## Data Types
 
@@ -120,4 +124,11 @@ Timestamp
 - The indexing means that readers only need to download small subsets of the full dataset (if you index intelligently)
 - No way to do "projections" so keep in mind you're always downloading the full document to disk
 - Subset of `find()` API is implemented, no Map Reduce API, no `$or`/`$and` since it's difficult to optimize
+- You can only sort by indexed fields, otherwise there's no difference from loading all the data and sorting in memory
 - Fully open source under AGPL-3.0 and with mostly MIT dependencies.
+
+## Indexing considerations:
+
+- If you do a search by fields that aren't indexed, you'll end up downloading the full collection (this is potentially really slow)
+- The order of fields in the index matters, they're used to create an ordered key based on the values
+- If you want to sort by a field, make sure it's the first field in an index
