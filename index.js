@@ -132,9 +132,11 @@ class Collection {
   // This is a private API
   async _indexDocument (bee, fields, doc) {
     if (!hasFields(doc, fields)) return
-    const idxKey = makeIndexKey(doc, fields)
     const idxValue = doc._id.id
-    await bee.put(idxKey, idxValue)
+    for (const flattened of flattenDocument(doc)) {
+      const idxKey = makeIndexKey(flattened, fields)
+      await bee.put(idxKey, idxValue)
+    }
   }
 
   // TODO: Cache indexes?
@@ -284,6 +286,7 @@ class Cursor {
         sort
       } = this.opts
       const query = this.query
+      const seen = new Set()
 
       let count = 0
       let skipped = 0
@@ -294,13 +297,18 @@ class Cursor {
       function processDoc (doc) {
         let shouldYield = null
         let shouldBreak = false
-        if (matchesQuery(doc, query)) {
-          if (toSkip > skipped) {
-            skipped++
-          } else {
-            count++
-            shouldYield = doc
-            if (count >= limit) shouldBreak = true
+
+        // If we've seen this document before, ignore it
+        if (!seen.has(doc._id.toString())) {
+          if (matchesQuery(doc, query)) {
+            if (toSkip > skipped) {
+              skipped++
+            } else {
+              seen.add(doc._id.toString())
+              count++
+              shouldYield = doc
+              if (count >= limit) shouldBreak = true
+            }
           }
         }
 
@@ -456,6 +464,25 @@ function makeIndexKey (doc, fields) {
       // Add the document ID
       .concat(doc._id)
   )
+}
+
+function * flattenDocument (doc) {
+  let hadArray = false
+  for (const key of Object.keys(doc)) {
+    if (Array.isArray(doc[key])) {
+      hadArray = true
+      const copy = { ...doc }
+      const values = doc[key]
+      delete copy[key]
+      for (const value of values) {
+        for (const flattened of flattenDocument(copy)) {
+          yield { ...flattened, [key]: value }
+        }
+      }
+    }
+  }
+
+  if (!hadArray) yield doc
 }
 
 function makeIndexKeyFromQuery (query, fields) {

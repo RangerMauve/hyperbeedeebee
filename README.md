@@ -106,11 +106,11 @@ Timestamp
 - [x] Find using `$exists` operator
 - [x] Index fields
 - [x] Sort by index (with find)
-- [ ] Flatten array for indexes
-- [ ] Indexed find by field `$eq` (only allow find for indexed fields)
+- [x] Indexed find by field `$eq` (only allow find for indexed fields)
+- [x] Flatten array for indexes
+- [ ] Get field values from index key without getting the doc
 - [ ] Indexed find for `$exists`
 - [ ] Indexed find by number field (only allow find for indexed fields)
-- [ ] Get field values from index key without getting the doc
 - [ ] Indexed find for `$in`
 - [ ] Indexed find for `$all`
 - [ ] Choose best index (hint API?)

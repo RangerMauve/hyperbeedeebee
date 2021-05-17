@@ -302,3 +302,42 @@ test('Use $eq for indexes', async (t) => {
     await db.close()
   }
 })
+
+test('Arrays get flattened for indexes', async (t) => {
+  const db = new DB(getBee())
+  try {
+    await db.collection('example').createIndex(['ingredients', 'name'])
+
+    await db.collection('example').insert({
+      name: 'le ghetti du spa',
+      ingredients: ['noodles', 'corn', 'sauce']
+    })
+    await db.collection('example').insert({
+      name: 'cheeseland',
+      ingredients: ['corn', 'cheese', 'sauce']
+    })
+    await db.collection('example').insert({
+      name: 'literally corn',
+      ingredients: ['corn']
+    })
+
+    const query = db.collection('example').find({
+      ingredients: 'sauce'
+    })
+      .sort('name')
+
+    const index = await query._getBestIndex()
+
+    t.ok(index, 'Using an index for the query')
+    t.deepEqual(index?.index?.fields, ['ingredients', 'name'], 'Using the correct index')
+
+    const results = await query
+
+    t.equal(results.length, 2, 'Found two matching documents')
+    t.equal(results[0]?.name, 'cheeseland', 'Documents got sorted correctly')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
