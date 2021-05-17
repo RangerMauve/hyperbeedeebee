@@ -151,19 +151,6 @@ class Collection {
 
     return indexes
   }
-
-  // This is a private API
-  async _getSortIndexForField (field) {
-    const indexes = await this.listIndexes()
-    const applicableIndexes = indexes
-    // Get only indexes that contain this field
-      .filter(({ fields }) => fields[0] === field)
-    // Sort by fewest indexed fields
-      .sort((a, b) => a.fields.length - b.fields.length)
-
-    // Return the index with the fewest fields (reduce false negatives)
-    return applicableIndexes[0]
-  }
 }
 
 class Cursor {
@@ -206,7 +193,7 @@ class Cursor {
     })
   }
 
-  async _getBestIndex () {
+  async getIndex () {
     const { sort } = this.opts
     const query = this.query
 
@@ -292,7 +279,7 @@ class Cursor {
       let skipped = 0
       const toSkip = skip
 
-      const bestIndex = await this._getBestIndex()
+      const bestIndex = await this.getIndex()
 
       function processDoc (doc) {
         let shouldYield = null
@@ -321,20 +308,37 @@ class Cursor {
       // If there is an index we should use
       if (bestIndex) {
         const { index, prefixFields } = bestIndex
+        const subQuery = getSubset(query, index.fields)
         const gt = makeIndexKeyFromQuery(query, prefixFields)
 
         const opts = {
           reverse: (sort?.direction === -1)
         }
-        if (gt && gt.length) opts.gt = gt
+        if (gt && gt.length) {
+          opts.gt = gt
+          // Add a `less than` range to constrain the search
+          const lt = Buffer.alloc(gt.length)
+          opts.lt = lt
+          gt.copy(lt)
+
+          // Set to MAX byte to only use keys with this prefix
+          lt[lt.length - 1] = 0xFF
+
+        }
 
         const stream = this.collection.idx.sub(index.name).createReadStream(opts)
 
-        for await (const { value: rawId } of stream) {
-          // TODO: Fetch values from index key
+        for await (const { key, value: rawId } of stream) {
+          const keyDoc = makeDocFromIndex(key, index.fields)
+
+          // Test the fields agains the index to avoid fetching the doc
+          if (!matchesQuery(keyDoc, subQuery)) continue
+
           const { value: rawDoc } = await this.collection.docs.get(rawId)
           const doc = BSON.deserialize(rawDoc)
 
+          // TODO: Avoid needing to double-process the values
+          // TODO: Support "projection" when the fields are all in the index
           const { shouldYield, shouldBreak } = processDoc(doc)
           if (shouldYield) yield shouldYield
           if (shouldBreak) break
@@ -352,22 +356,7 @@ class Cursor {
           if (shouldBreak) break
         }
       } else {
-        const index = await this.collection._getSortIndexForField(sort.field)
-
-        if (!index) throw new Error(`No indexes found to sort for field "${sort.field}"`)
-
-        const stream = this.collection.idx.sub(index.name).createReadStream({
-          reverse: (sort.direction === -1)
-        })
-
-        for await (const { value: rawId } of stream) {
-          const { value: rawDoc } = await this.collection.docs.get(rawId)
-          const doc = BSON.deserialize(rawDoc)
-
-          const { shouldYield, shouldBreak } = processDoc(doc)
-          if (shouldYield) yield shouldYield
-          if (shouldBreak) break
-        }
+        throw new Error(`No indexes found to sort for field "${sort.field}"`)
       }
     }
   }
@@ -458,12 +447,44 @@ function makeIndexKey (doc, fields) {
   // TODO: Does BSON array work well for ordering?
   // TODO: Maybe use a custom encoding?
   // Serialize the data into a BSON array
-  return BSON.serialize(
+  const buffer = BSON.serialize(
     // Take all the indexed fields
     fields.map((field) => doc[field])
       // Add the document ID
-      .concat(doc._id)
+      .concat(doc._id || [])
   )
+
+  // Get rid of the length prefix, we don't need it.
+  const noPrefix = buffer.slice(4)
+
+  return noPrefix
+}
+
+function makeDocFromIndex (key, fields) {
+  const buffer = Buffer.alloc(key.length + 4)
+  key.copy(buffer, 4)
+  // Write a valid length prefix to the buffer for BSON decoding
+  buffer.writeInt32LE(buffer.length)
+
+  // Should be a JSON object with numbered key (a BSON array)
+  const parsed = BSON.deserialize(buffer)
+  const doc = {}
+
+  for (const index of Object.keys(parsed)) {
+    const field = fields[index] || '_id'
+    doc[field] = parsed[index]
+  }
+
+  return doc
+}
+
+function getSubset (doc, fields) {
+  return fields.reduce((res, field) => {
+    if (field in doc) {
+      res[field] = doc[field]
+    }
+    return res
+  }, {})
 }
 
 function * flattenDocument (doc) {

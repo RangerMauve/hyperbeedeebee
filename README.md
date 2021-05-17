@@ -106,14 +106,14 @@ Timestamp
 - [x] Find using `$exists` operator
 - [x] Index fields
 - [x] Sort by index (with find)
-- [x] Indexed find by field `$eq` (only allow find for indexed fields)
+- [x] Indexed find by field `$eq`
 - [x] Flatten array for indexes
-- [ ] Get field values from index key without getting the doc
+- [x] Get field values from index key without getting the doc
 - [ ] Indexed find for `$exists`
-- [ ] Indexed find by number field (only allow find for indexed fields)
+- [ ] Indexed find by number field
 - [ ] Indexed find for `$in`
 - [ ] Indexed find for `$all`
-- [ ] Choose best index (hint API?)
+- [ ] Hint API (specify index to use)
 - [ ] Find on fields that aren't indexed
 - [ ] Test if iterators clean up properly
 - [ ] Detect when data isn't available from peers and emit an error of some sort instead of waiting indefinately.
@@ -138,3 +138,4 @@ Indexes are super important to make your applications snappy and to reduce the o
 - If an index cannot be found to satisfy a `sort` the query will fail.
 - If you're using `$gt/$lt/$gte/$lte` in your query, they will perform best if the same considerations as the sort are applied.
 - If the fields in the index can be used to rule out a document as matching, then you can avoid loading more documents and doing fewer overall comparisons on data.
+- If your field is a unicode string which has `0x00` bytes in it, then the sorting might break due to the way BSON serializes unicode strings. Proceed with caution!

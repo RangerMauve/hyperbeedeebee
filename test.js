@@ -276,8 +276,7 @@ test('Use $eq for indexes', async (t) => {
       color: 'red'
     })
 
-    // TODO: Expose this in an official API somehow?
-    const index = await query._getBestIndex()
+    const index = await query.getIndex()
 
     t.ok(index, 'Using an index for the query')
     t.deepEqual(index?.index?.fields, indexFields, 'Using the correct index')
@@ -288,7 +287,7 @@ test('Use $eq for indexes', async (t) => {
 
     const sortedQuery = query.sort('flavor', -1)
 
-    const sortedIndex = await sortedQuery._getBestIndex()
+    const sortedIndex = await sortedQuery.getIndex()
 
     t.ok(sortedIndex, 'Using an index for the sorted query')
 
@@ -326,7 +325,7 @@ test('Arrays get flattened for indexes', async (t) => {
     })
       .sort('name')
 
-    const index = await query._getBestIndex()
+    const index = await query.getIndex()
 
     t.ok(index, 'Using an index for the query')
     t.deepEqual(index?.index?.fields, ['ingredients', 'name'], 'Using the correct index')
