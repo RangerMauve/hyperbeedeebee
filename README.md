@@ -129,6 +129,12 @@ Timestamp
 
 ## Indexing considerations:
 
+Indexes are super important to make your applications snappy and to reduce the overall CPU/Bandwidth/Storage usage of queries.
+
 - If you do a search by fields that aren't indexed, you'll end up downloading the full collection (this is potentially really slow)
 - The order of fields in the index matters, they're used to create an ordered key based on the values
 - If you want to sort by a field, make sure it's the first field in an index
+- You can have indexed fields before the sorted field if they are only used for $eq operations, this is due to the database's ability to turn them into a prefix to speed up the search.
+- If an index cannot be found to satisfy a `sort` the query will fail.
+- If you're using `$gt/$lt/$gte/$lte` in your query, they will perform best if the same considerations as the sort are applied.
+- If the fields in the index can be used to rule out a document as matching, then you can avoid loading more documents and doing fewer overall comparisons on data.

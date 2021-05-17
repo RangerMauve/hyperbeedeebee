@@ -248,14 +248,54 @@ test('Sort by index', async (t) => {
 })
 
 test('Cannot sort without index', async (t) => {
-    const db = new DB(getBee())
+  const db = new DB(getBee())
+  try {
     try {
-
-		try {
-			await db.collection('example').find().sort('notfound')
-		} catch {
+      await db.collection('example').find().sort('notfound')
+    } catch {
       t.pass('Threw error when sorting without index')
-		}
+    }
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Use $eq for indexes', async (t) => {
+  const db = new DB(getBee())
+  try {
+    const indexFields = ['color', 'flavor']
+    await db.collection('example').createIndex(indexFields)
+
+    await db.collection('example').insert({ example: 1, color: 'red', flavor: 'watermelon' })
+    await db.collection('example').insert({ example: 2, color: 'red', flavor: 'raspberry' })
+    await db.collection('example').insert({ example: 3, color: 'purple', flavor: 'good' })
+
+    const query = db.collection('example').find({
+      color: 'red'
+    })
+
+    // TODO: Expose this in an official API somehow?
+    const index = await query._getBestIndex()
+
+    t.ok(index, 'Using an index for the query')
+    t.deepEqual(index?.index?.fields, indexFields, 'Using the correct index')
+
+    const results = await query
+
+    t.equal(results.length, 2, 'Got expected documents')
+
+    const sortedQuery = query.sort('flavor', -1)
+
+    const sortedIndex = await sortedQuery._getBestIndex()
+
+    t.ok(sortedIndex, 'Using an index for the sorted query')
+
+    const sorted = await sortedQuery
+
+    t.equal(sorted.length, 2, 'Got expected documents when sorting')
+    t.equal(sorted[0]?.flavor, 'watermelon', 'Got expected order for sort')
 
     t.end()
   } finally {

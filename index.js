@@ -204,6 +204,54 @@ class Cursor {
     })
   }
 
+  async _getBestIndex () {
+    const { sort } = this.opts
+    const query = this.query
+
+    const queryFields = Object.keys(query)
+    const eqS = queryFields.filter((name) => {
+      const queryValue = query[name]
+      if (!isQueryObject(queryValue)) return true
+      return ('$eq' in queryValue)
+    })
+
+    const allIndexes = await this.collection.listIndexes()
+    const matchingIndexes = allIndexes
+      .filter(({ fields }) => {
+        if (sort) {
+          // At the very least we _need_ to have the sort field
+          const sortIndex = fields.indexOf(sort.field)
+          if (sortIndex === -1) return false
+          // All the fields before the sort should be $eq fields
+          const consecutive = consecutiveSubset(fields, eqS)
+          return consecutive === sortIndex
+        } else {
+          // Ensure the fields have _some_ of the $eq fields
+          return fields.some((field) => eqS.includes(field))
+        }
+      })
+      // Sort by most $eq fields at the beginning
+      .sort(({ fields: fieldsA }, { fields: fieldsB }) => {
+        return consecutiveSubset(fieldsB, eqS) - consecutiveSubset(fieldsA, eqS)
+      })
+
+    // The best is the one with the most eqS
+    const index = matchingIndexes[0]
+
+    if (!index) {
+      return null
+    }
+
+    const { fields } = index
+    const prefixFields = fields.slice(0, consecutiveSubset(index.fields, eqS))
+
+    return {
+      index,
+      eqS,
+      prefixFields
+    }
+  }
+
   async then (resolve, reject) {
     try {
       const results = []
@@ -235,29 +283,65 @@ class Cursor {
         skip = 0,
         sort
       } = this.opts
+      const query = this.query
 
       let count = 0
       let skipped = 0
       const toSkip = skip
 
-      let stream = null
-      // If we aren't sorting, sort over all docs
-      if (sort === null) {
-        stream = this.collection.docs.createReadStream()
+      const bestIndex = await this._getBestIndex()
 
-        for await (const { value: rawDoc } of stream) {
-        // TODO: Can we avoid iterating over keys that should be skipped?
+      function processDoc (doc) {
+        let shouldYield = null
+        let shouldBreak = false
+        if (matchesQuery(doc, query)) {
+          if (toSkip > skipped) {
+            skipped++
+          } else {
+            count++
+            shouldYield = doc
+            if (count >= limit) shouldBreak = true
+          }
+        }
+
+        return {
+          shouldBreak,
+          shouldYield
+        }
+      }
+
+      // If there is an index we should use
+      if (bestIndex) {
+        const { index, prefixFields } = bestIndex
+        const gt = makeIndexKeyFromQuery(query, prefixFields)
+
+        const opts = {
+          reverse: (sort?.direction === -1)
+        }
+        if (gt && gt.length) opts.gt = gt
+
+        const stream = this.collection.idx.sub(index.name).createReadStream(opts)
+
+        for await (const { value: rawId } of stream) {
+          // TODO: Fetch values from index key
+          const { value: rawDoc } = await this.collection.docs.get(rawId)
           const doc = BSON.deserialize(rawDoc)
 
-          if (matchesQuery(doc, this.query)) {
-            if (toSkip > skipped) {
-              skipped++
-            } else {
-              count++
-              yield doc
-              if (count >= limit) break
-            }
-          }
+          const { shouldYield, shouldBreak } = processDoc(doc)
+          if (shouldYield) yield shouldYield
+          if (shouldBreak) break
+        }
+      } else if (sort === null) {
+        // If we aren't sorting, and don't have an index, iterate over all docs
+        const stream = this.collection.docs.createReadStream()
+
+        for await (const { value: rawDoc } of stream) {
+          // TODO: Can we avoid iterating over keys that should be skipped?
+          const doc = BSON.deserialize(rawDoc)
+
+          const { shouldYield, shouldBreak } = processDoc(doc)
+          if (shouldYield) yield shouldYield
+          if (shouldBreak) break
         }
       } else {
         const index = await this.collection._getSortIndexForField(sort.field)
@@ -269,19 +353,12 @@ class Cursor {
         })
 
         for await (const { value: rawId } of stream) {
-          const {value: rawDoc} = await this.collection.docs.get(rawId)
+          const { value: rawDoc } = await this.collection.docs.get(rawId)
           const doc = BSON.deserialize(rawDoc)
 
-          // TODO: Deduplicate this bit?
-          if (matchesQuery(doc, this.query)) {
-            if (toSkip > skipped) {
-              skipped++
-            } else {
-              count++
-              yield doc
-              if (count >= limit) break
-            }
-          }
+          const { shouldYield, shouldBreak } = processDoc(doc)
+          if (shouldYield) yield shouldYield
+          if (shouldBreak) break
         }
       }
     }
@@ -298,7 +375,7 @@ function matchesQuery (doc, query) {
 }
 
 function queryCompare (docValue, queryValue) {
-  if (typeof queryValue === 'object') {
+  if (isQueryObject(queryValue)) {
     for (const queryType of Object.keys(queryValue)) {
       const compare = QUERY_TYPES[queryType]
       // TODO: Validate somewhere else?
@@ -370,13 +447,49 @@ function hasFields (doc, fields) {
 }
 
 function makeIndexKey (doc, fields) {
+  // TODO: Does BSON array work well for ordering?
+  // TODO: Maybe use a custom encoding?
   // Serialize the data into a BSON array
   return BSON.serialize(
     // Take all the indexed fields
     fields.map((field) => doc[field])
-    // Add the document ID
+      // Add the document ID
       .concat(doc._id)
   )
+}
+
+function makeIndexKeyFromQuery (query, fields) {
+  // TODO: Account for $eq and $gt fields
+  const doc = fields.reduce((res, field) => {
+    const value = query[field]
+
+    if (isQueryObject(value) && ('$eq' in value)) {
+      res[field] = value.$eq
+    } else {
+      res[field] = value
+    }
+
+    return res
+  }, {})
+
+  return makeIndexKey(doc, fields)
+}
+
+function isQueryObject (object) {
+  return (typeof object === 'object') && has$Keys(object)
+}
+
+function has$Keys (object) {
+  return Object.keys(object).some((key) => key.startsWith('$'))
+}
+
+function consecutiveSubset (origin, values) {
+  let counter = 0
+  for (const item of origin) {
+    if (!values.includes(item)) return counter
+    counter++
+  }
+  return counter
 }
 
 module.exports = {
