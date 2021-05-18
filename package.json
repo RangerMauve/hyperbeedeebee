@@ -4,7 +4,8 @@
   "description": "A MongoDB-like database built on top of Hyperbee with support for indexing",
   "main": "index.js",
   "scripts": {
-    "test": "node ./test.js"
+    "lint": "standard --fix",
+    "test": "npm run lint && node ./test.js"
   },
   "repository": {
     "type": "git",
@@ -30,6 +31,7 @@
     "hyperbee": "^1.5.4",
     "hypercore": "^9.9.1",
     "random-access-memory": "^3.1.2",
+    "standard": "^16.0.3",
     "tape": "^5.2.2"
   }
 }

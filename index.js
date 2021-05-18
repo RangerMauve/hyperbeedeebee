@@ -48,6 +48,7 @@ class Collection {
     this.idx = bee.sub('idx')
   }
 
+  // TODO: Add insertMany with batch insert
   async insert (rawDoc) {
     let doc = rawDoc
     if (!doc) throw new TypeError('No Document Supplied')
@@ -129,10 +130,11 @@ class Collection {
     }
   }
 
-  // This is a private API
+  // This is a private API, don't depend on it
   async _indexDocument (bee, fields, doc) {
     if (!hasFields(doc, fields)) return
     const idxValue = doc._id.id
+    // TODO: Batch insert the index keys
     for (const flattened of flattenDocument(doc)) {
       const idxKey = makeIndexKey(flattened, fields)
       await bee.put(idxKey, idxValue)
@@ -198,7 +200,11 @@ class Cursor {
     const query = this.query
 
     const queryFields = Object.keys(query)
-    const eqS = queryFields.filter((name) => {
+    // Filter out fields with `$exists: false` since we can't index non-existance
+    const existingFields = queryFields.filter((field) => {
+      return isQueryObject(query[field]) ? query[field].$exists !== false : true
+    })
+    const eqS = existingFields.filter((name) => {
       const queryValue = query[name]
       if (!isQueryObject(queryValue)) return true
       return ('$eq' in queryValue)
@@ -215,8 +221,8 @@ class Cursor {
           const consecutive = consecutiveSubset(fields, eqS)
           return consecutive === sortIndex
         } else {
-          // Ensure the fields have _some_ of the $eq fields
-          return fields.some((field) => eqS.includes(field))
+          // Ensure the fields have _some_ of the query fields
+          return fields.some((field) => existingFields.includes(field))
         }
       })
       // Sort by most $eq fields at the beginning
@@ -232,6 +238,7 @@ class Cursor {
     }
 
     const { fields } = index
+    // TODO: Use $gt/$lt fields in the prefix if after $eqs (and doesn't conflict with sort)
     const prefixFields = fields.slice(0, consecutiveSubset(index.fields, eqS))
 
     return {
@@ -308,7 +315,13 @@ class Cursor {
       // If there is an index we should use
       if (bestIndex) {
         const { index, prefixFields } = bestIndex
-        const subQuery = getSubset(query, index.fields)
+        // TODO: Support $all and $in more efficiently
+        // $all can't be used with just the fields in the index
+        // We need to fetch the entire document to test this field
+        const subQueryFields = index.fields.filter((field) => {
+          return isQueryObject(query[field]) ? !('$all' in query[field]) : true
+        })
+        const subQuery = getSubset(query, subQueryFields)
         const gt = makeIndexKeyFromQuery(query, prefixFields)
 
         const opts = {
@@ -323,7 +336,6 @@ class Cursor {
 
           // Set to MAX byte to only use keys with this prefix
           lt[lt.length - 1] = 0xFF
-
         }
 
         const stream = this.collection.idx.sub(index.name).createReadStream(opts)

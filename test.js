@@ -201,6 +201,31 @@ test('Search using $in and $all', async (t) => {
   }
 })
 
+test('Search using $exists', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').insert({ example: 'wow' })
+    await db.collection('example').insert({ nothing: 'here' })
+
+    const results1 = await db.collection('example').find({
+      example: { $exists: true }
+    })
+
+    t.equal(results1.length, 1, 'Found document with field')
+
+    const results2 = await db.collection('example').find({
+      example: { $exists: false }
+    })
+
+    t.equal(results2.length, 1, 'Found document without field')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
 test('Create indexes and list them', async (t) => {
   const db = new DB(getBee())
   try {
@@ -255,6 +280,44 @@ test('Cannot sort without index', async (t) => {
     } catch {
       t.pass('Threw error when sorting without index')
     }
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Limit and skip with index sort', async (t) => {
+  const db = new DB(getBee())
+  const NUM_TO_MAKE = 30
+  let i = NUM_TO_MAKE
+  try {
+    await db.collection('example').createIndex(['i'])
+
+    while (i--) {
+      await db.collection('example').insert({ i })
+    }
+
+    const query = db
+      .collection('example')
+      .find()
+      .skip(10)
+      .limit(10)
+      .sort('i', -1)
+
+    const index = await query.getIndex()
+
+    t.ok(index, 'Using index for search')
+
+    const found = await query
+
+    t.equal(found.length, 10, 'Got expected number of items')
+
+    const onlyIs = found.map(({ i }) => i)
+
+    const expected = [19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+
+    t.deepEqual(onlyIs, expected, 'Got expected subset of Ids')
 
     t.end()
   } finally {
@@ -334,6 +397,115 @@ test('Arrays get flattened for indexes', async (t) => {
 
     t.equal(results.length, 2, 'Found two matching documents')
     t.equal(results[0]?.name, 'cheeseland', 'Documents got sorted correctly')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Indexed Search using $exists', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['example'])
+
+    await db.collection('example').insert({ example: 'wow' })
+    await db.collection('example').insert({ nothing: 'here' })
+
+    const hasIndex = await db.collection('example').find({
+      example: { $exists: true }
+    }).getIndex()
+
+    t.ok(hasIndex, 'Using index for search')
+
+    const results1 = await db.collection('example').find({
+      example: { $exists: true }
+    })
+
+    t.equal(results1.length, 1, 'Found document with field')
+
+    const results2 = await db.collection('example').find({
+      example: { $exists: false }
+    })
+
+    t.equal(results2.length, 1, 'Found document without field')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Indexed Search by date fields (with sort)', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['example'])
+    await db.collection('example').insert({ example: new Date(2000, 0) })
+    await db.collection('example').insert({ example: new Date(2000, 2) })
+    await db.collection('example').insert({ example: new Date(2000, 6) })
+    await db.collection('example').insert({ example: new Date(2000, 11) })
+
+    const query = db.collection('example').find({
+      example: {
+        $gte: new Date(2000, 1),
+        $lte: new Date(2000, 6)
+      }
+    }).sort('example')
+
+    const index = await query.getIndex()
+
+    t.ok(index, 'Using index for date search')
+
+    const found1 = await query
+
+    t.equal(found1.length, 2, 'Found 2 documents >= Feb and <= July')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Indexed Search using $in and $all', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['example'])
+
+    await db.collection('example').insert({ example: [1, 3, 5, 7, 9] })
+    await db.collection('example').insert({ example: [2, 3, 6, 8, 10] })
+    await db.collection('example').insert({ example: 1 })
+    await db.collection('example').insert({ example: 2 })
+
+    const query1 = db.collection('example').find({
+      example: {
+        $in: [1, 3, 8]
+      }
+    })
+
+    const index1 = await query1.getIndex()
+
+    t.ok(index1, 'Using index for $in search')
+
+    const found1 = await query1
+
+    t.equal(found1.length, 3, 'Found 3 matching documents')
+
+    const query2 = db.collection('example').find({
+      example: {
+        $all: [2, 6, 8]
+      }
+    })
+
+    const index2 = await query2.getIndex()
+
+    t.ok(index2, 'Using index for $all search')
+
+    const found2 = await query2
+
+    t.equal(found2.length, 1, 'Found 1 matching document')
 
     t.end()
   } finally {
