@@ -109,13 +109,16 @@ Timestamp
 - [x] Indexed find by field `$eq`
 - [x] Flatten array for indexes
 - [x] Get field values from index key without getting the doc
-- [ ] Indexed find for `$exists`
-- [ ] Indexed find by number field
-- [ ] Indexed find for `$in`
-- [ ] Indexed find for `$all`
+- [x] Find on fields that aren't indexed
+- [x] Indexed find for `$exists`
+- [x] Indexed find by number field
+- [x] Indexed find for `$in`
+- [x] Indexed find for `$all`
 - [ ] Hint API (specify index to use)
-- [ ] Find on fields that aren't indexed
 - [ ] Test if iterators clean up properly
+- [ ] More efficient support for `$gt`/`$gte`/`$lt`/`$lte` indexes
+- [ ] More efficient support for `$all` indexes
+- [ ] More efficient support for `$in` indexes
 - [ ] Detect when data isn't available from peers and emit an error of some sort instead of waiting indefinately.
 
 ## Important Differences From MongoDB
