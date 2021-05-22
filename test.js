@@ -512,3 +512,25 @@ test('Indexed Search using $in and $all', async (t) => {
     await db.close()
   }
 })
+
+test.only('Indexed text search using sort and $all', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['index', 'example'])
+
+    await db.collection('example').insert({ index: 1, example: ['hello', 'world'] })
+    await db.collection('example').insert({ index: 2, example: ['goodbye', 'world'] })
+
+    const results1 = await db.collection('example').find({
+      example: {
+        $all: ['world']
+      }
+    })
+
+    t.equal(results1.length, 2, 'Matched two documents for $all')
+    t.end()
+  } finally {
+    await db.close()
+  }
+})

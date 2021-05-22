@@ -261,10 +261,15 @@ class Cursor {
   }
 
   async * [Symbol.asyncIterator] () {
-    if (this.query._id) {
+    if (this.query._id && (this.query._id instanceof ObjectID)) {
       // Doc IDs are unique, so we can query against them without doing a search
       const key = this.query._id.id
-      const { value: rawDoc } = await this.collection.docs.get(key)
+
+      const found = await this.collection.docs.get(key)
+
+      if (!found) throw new Error('not found')
+
+      const { value: rawDoc } = found
       if (!rawDoc) {
         throw new Error('not found')
       }
