@@ -513,7 +513,7 @@ test('Indexed Search using $in and $all', async (t) => {
   }
 })
 
-test.only('Indexed text search using sort and $all', async (t) => {
+test('Indexed text search using sort and $all', async (t) => {
   const db = new DB(getBee())
 
   try {
@@ -529,6 +529,38 @@ test.only('Indexed text search using sort and $all', async (t) => {
     })
 
     t.equal(results1.length, 2, 'Matched two documents for $all')
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Use hint API to specify the index to use', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['example'])
+    await db.collection('example').createIndex(['createdAt'])
+
+    await db.collection('example').insert({ example: 'wow', createdAt: new Date() })
+    await db.collection('example').insert({ example: 'here', createdAt: new Date() })
+
+    const chosen1 = await db
+      .collection('example')
+      .find({}).hint('example')
+      .getIndex()
+
+    t.equal(chosen1?.index?.name, 'example', 'Hinted index got used')
+
+    const chosen2 = await db
+      .collection('example')
+      .find({})
+      .sort('createdAt')
+      .hint('createdAt')
+      .getIndex()
+
+    t.equal(chosen2?.index?.name, 'createdAt', 'Hinted index got used')
+
     t.end()
   } finally {
     await db.close()

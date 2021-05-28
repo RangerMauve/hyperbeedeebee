@@ -159,7 +159,8 @@ class Cursor {
   constructor (query = {}, collection, opts = {
     limit: Infinity,
     skip: 0,
-    sort: null
+    sort: null,
+    hint: null
   }) {
     this.query = query
     this.collection = collection
@@ -175,6 +176,10 @@ class Cursor {
     }
 
     return count
+  }
+
+  hint (hint) {
+    return new Cursor(this.query, this.collection, { ...this.opts, hint })
   }
 
   limit (limit) {
@@ -196,7 +201,7 @@ class Cursor {
   }
 
   async getIndex () {
-    const { sort } = this.opts
+    const { sort, hint } = this.opts
     const query = this.query
 
     const queryFields = Object.keys(query)
@@ -209,6 +214,25 @@ class Cursor {
       if (!isQueryObject(queryValue)) return true
       return ('$eq' in queryValue)
     })
+
+    if (hint) {
+      const hintIndex = await this.collection.getIndex(hint)
+      const { fields } = hintIndex
+      if (sort) {
+        const sortIndex = fields.indexOf(sort.field)
+        if (sortIndex === -1) throw new Error("Hinted Index doesn't match required sort")
+        const consecutive = consecutiveSubset(fields, eqS)
+        if (consecutive !== sortIndex) throw new Error("Hinted index doesn't match required sort")
+      }
+
+      const prefixFields = fields.slice(0, consecutiveSubset(fields, eqS))
+
+      return {
+        index: hintIndex,
+        prefixFields,
+        eqS
+      }
+    }
 
     const allIndexes = await this.collection.listIndexes()
     const matchingIndexes = allIndexes
@@ -239,7 +263,7 @@ class Cursor {
 
     const { fields } = index
     // TODO: Use $gt/$lt fields in the prefix if after $eqs (and doesn't conflict with sort)
-    const prefixFields = fields.slice(0, consecutiveSubset(index.fields, eqS))
+    const prefixFields = fields.slice(0, consecutiveSubset(fields, eqS))
 
     return {
       index,

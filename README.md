@@ -114,7 +114,7 @@ Timestamp
 - [x] Indexed find by number field
 - [x] Indexed find for `$in`
 - [x] Indexed find for `$all`
-- [ ] Hint API (specify index to use)
+- [x] Hint API (specify index to use)
 - [ ] Test if iterators clean up properly
 - [ ] More efficient support for `$gt`/`$gte`/`$lt`/`$lte` indexes
 - [ ] More efficient support for `$all` indexes
