@@ -107,6 +107,8 @@ class Collection {
     await this.idxs.put(name, BSON.serialize(index))
 
     await this.reIndex(name)
+
+    return name
   }
 
   async indexExists (name) {
