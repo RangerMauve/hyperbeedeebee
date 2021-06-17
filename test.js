@@ -468,16 +468,17 @@ test('Indexed Search by date fields (with sort)', async (t) => {
   }
 })
 
-test('Indexed Search using $in and $all', async (t) => {
+test('Indexed Search using $in and $all with numbers', async (t) => {
   const db = new DB(getBee())
 
   try {
     await db.collection('example').createIndex(['example'])
 
-    await db.collection('example').insert({ example: [1, 3, 5, 7, 9] })
-    await db.collection('example').insert({ example: [2, 3, 6, 8, 10] })
-    await db.collection('example').insert({ example: 1 })
-    await db.collection('example').insert({ example: 2 })
+    // Account for array fields that aren't in the index.
+    await db.collection('example').insert({ example: [1, 3, 5, 7, 9], fake: [] })
+    await db.collection('example').insert({ example: [2, 3, 6, 8, 10], fake: [] })
+    await db.collection('example').insert({ example: 1, fake: [] })
+    await db.collection('example').insert({ example: 2, fake: [] })
 
     const query1 = db.collection('example').find({
       example: {
@@ -496,6 +497,51 @@ test('Indexed Search using $in and $all', async (t) => {
     const query2 = db.collection('example').find({
       example: {
         $all: [2, 6, 8]
+      }
+    })
+
+    const index2 = await query2.getIndex()
+
+    t.ok(index2, 'Using index for $all search')
+
+    const found2 = await query2
+
+    t.equal(found2.length, 1, 'Found 1 matching document')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
+test('Indexed Search using $in and $all with string', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    await db.collection('example').createIndex(['example'])
+
+    await db.collection('example').insert({ example: ['cats', 'frogs', 'pets', 'spiders', 'furry'] })
+    await db.collection('example').insert({ example: ['dogs', 'frogs', 'companions', 'bats'] })
+    await db.collection('example').insert({ example: 'cats' })
+    await db.collection('example').insert({ example: 'dogs' })
+
+    const query1 = db.collection('example').find({
+      example: {
+        $in: ['cats', 'frogs', 'bats']
+      }
+    })
+
+    const index1 = await query1.getIndex()
+
+    t.ok(index1, 'Using index for $in search')
+
+    const found1 = await query1
+
+    t.equal(found1.length, 3, 'Found 3 matching documents')
+
+    const query2 = db.collection('example').find({
+      example: {
+        $all: ['dogs', 'companions', 'bats']
       }
     })
 

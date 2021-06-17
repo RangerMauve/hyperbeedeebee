@@ -137,7 +137,7 @@ class Collection {
     if (!hasFields(doc, fields)) return
     const idxValue = doc._id.id
     // TODO: Batch insert the index keys
-    for (const flattened of flattenDocument(doc)) {
+    for (const flattened of flattenDocument(doc, fields)) {
       const idxKey = makeIndexKey(flattened, fields)
       await bee.put(idxKey, idxValue)
     }
@@ -530,16 +530,20 @@ function getSubset (doc, fields) {
   }, {})
 }
 
-function * flattenDocument (doc) {
+function * flattenDocument (doc, fields) {
   let hadArray = false
-  for (const key of Object.keys(doc)) {
-    if (Array.isArray(doc[key])) {
+
+  for (const key of fields) {
+    const values = doc[key]
+    if (Array.isArray(values) && values.length) {
       hadArray = true
       const copy = { ...doc }
-      const values = doc[key]
       delete copy[key]
+
+      const remainingFields = fields.filter((field) => field !== key)
+
       for (const value of values) {
-        for (const flattened of flattenDocument(copy)) {
+        for (const flattened of flattenDocument(copy, remainingFields)) {
           yield { ...flattened, [key]: value }
         }
       }
