@@ -166,12 +166,12 @@ If you specify a `_id` you can find the document without needing to perform an a
 You can also search through all documents for a particular query using a cursor.
 Cursors are like a "query builder" where you can specify additional properties like sorting and skipping.
 
-You can get all matching documents in a cursor with `await cursor`, or you can use `for await(const doc of cursor)` to asynchornously iterate through the documents one at a time.
+You can get all matching documents in a cursor with `await cursor`, or you can use `for await(const doc of cursor)` to asynchronously iterate through the documents one at a time.
 Using the AsyncIterator feature of cursors is preferred so that you can speed up your searches and avoid loading too much data into memory.
 
 Note that the cursor will attempt to use any indexes that are in your query (or the sort) to speed up performance.
 
-### `cost docs = await cursor`
+### `const docs = await cursor`
 
 You can treat the cursor as a promise to resolve the set of all documents within it.
 Note that every time you await the cursor, you're fetching the documents from the database since it isn't a "real" promise.
@@ -184,7 +184,7 @@ This method is important if you're expecting a very large set of results or want
 
 ### `const cursor = cursor.skip(number)`
 
-You can skip a number of results for pagination (useful with `cursor.limit`
+You can skip a number of results for pagination (useful with `cursor.limit`)
 
 ### `const cursor = cursor.limit(number)`
 
@@ -208,7 +208,7 @@ Count the number of documents that match this query. Note that this operation _d
 
 Find fields that are equal to a specific value.
 
-e.g.
+E.g.
 
 ```JavaScript
 const docs = await collection.find({
@@ -285,7 +285,7 @@ const docs = await collection.find({
 - [x] Sketch up API
 - [x] Insert (with BSON encoding)
 - [x] Find all docs
-- [x] Find by _id
+- [x] Find by `_id`
 - [x] Find by field eq (no index)
 - [x] Find by array field includes
 - [x] Find by number field `$gt`/`$gte`/`$lt`/`$lte`
