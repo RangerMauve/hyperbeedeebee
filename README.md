@@ -204,6 +204,39 @@ Hint at which database index the search should use.
 
 Count the number of documents that match this query. Note that this operation _does_ download the documents from peers.
 
+### `const {nMatched,nModified, nUpserted} = await collection.update(query, update, {upsert=false,multi=false,hint=null} = {})`
+
+Update one or more documents in a collection that match a particular `query` (same query format as `.find()`).
+You can specify that you want to update all documents that match using `multi: true`.
+You can have the DB insert a document if it doesn't exist by specifying `upsert:true`.
+You can specify a `hint` for which DB to use when searching for documents.
+The `update` can either be a plain JavaScript object that maps which properties should be set, or it can be an `Update` object with properties that are documented below.
+Note that order is not guaranteed if you specify several `update` operations that use the same key.
+The `update` can also be an Array of `Update` objects in which case the operations will be applied in that order.
+
+The return value contains fields for `nMatched` (number of documents that got matched in the search),
+`nModified` (number of documents that got modified), and `nUpserted` (number of documents that got upserted if `upsert: true` was set in the options.
+
+E.g.
+
+```JavaScript
+const {nModified} = await collection.update({
+  birthday: today
+}, {
+  $inc: {age: 1}
+}, {
+  multi: true
+})
+
+const {nUpserted} = await collection.update({
+  some_impossible_search: Infinity
+}, {
+  hello: 'World!'
+}, {
+  upsert: true
+})
+```
+
 ### `query[field] query[field].$eq`
 
 Find fields that are equal to a specific value.
@@ -276,6 +309,176 @@ Note that it's impossible to use indexes for `$exists: false` at the moment.
 const docs = await collection.find({
   secret: {
     $exists: false
+  }
+})
+```
+
+### `update[field] = value`
+
+You can set a field in a document by specifying it.
+
+Note that nested fields with `.` are not yet supported, and fields with `$` at the start may conflict with other query parameters.
+
+Effectively an alias for `update.$set[field]`
+
+```JavaScript
+// add the field `hello` to all documents in the collection
+await collection.update({}, {
+  hello: 'world',
+  goodbye: 'space'
+}, {multi:true})
+```
+
+### `update.$set[field] = value`
+
+You can set a field in the document to a specific value using `$set`.
+
+```JavaScript
+// add the field `hello` to all documents in the collection
+await collection.update({}, {
+  $set: {
+    hello: 'world',
+    something: 'else'
+  }
+}, {multi:true})
+```
+
+### `update.$unset[field] = ''`
+
+You can delete a field from a document using `$unset`.
+
+The value of the query can be anything.
+
+```JavaScript
+await collection.update({}, {
+  $unset: {
+    honor: ''
+  }
+}, {multi:true})
+```
+
+### `update.$rename[field] = newName`
+
+You can rename fields in a document using `$rename`
+
+Effectively it deletes the existing `field` and sets the `newName` field to the value of the old field.
+
+```JavaScript
+await collection.update({}, {
+  $rename: {
+    oldFieldName: 'newFieldName'
+  }
+}, {multi:true})
+```
+
+### `update.$inc[field] = number`
+
+You can use `$inc` to specify fields that should be incremented.
+
+The `number` is the amount to increment by.
+
+You can set `number` to a negative number to decrement fields.
+
+If the field is not set in the document, the field will be set to `number`.
+
+```JavaScript
+await collection.update({}, {
+  $inc: {
+    points: 1000
+  }
+}, {multi:true})
+```
+
+### `update.$mult[field] = number`
+
+You can use `$mult` to specify fields that should be multiplied.
+
+The `number` is the amount to multiply by.
+
+If the field is not set in the document, the field will be set to `number`.
+
+```JavaScript
+await collection.update({}, {
+  $mult: {
+    hp: 2,
+    mp: 0.5
+  }
+}, {multi:true})
+```
+
+### `update.$push[field] = value`
+
+You can append to the end of an array using `$push`
+
+```JavaScript
+// Add `adorable` to all objects with `tags` containing `cute`
+await collection.update({tags: 'cute'}, {
+  $push: {
+    tags: 'adorable'
+  }
+}, {multi:true})
+```
+
+### `update.$addToSet[field] = value`
+
+You can append a value to an array if that array doesn't already contain the value.
+
+Useful for avoiding duplication.
+
+If the `field` is not in the document, it will be set to an array with the `value`.
+
+```JavaScript
+// Add `adorable` to all objects with `tags` containing `cute`
+// Avoids adding it to thing that are already adorable
+await collection.update({tags: 'cute'}, {
+  $addToSet: {
+    tags: 'adorable'
+  }
+}, {multi:true})
+```
+
+You can use `$each` in the `value` to add a set of values.
+
+```JavaScript
+await collection.update({tags: 'cute'}, {
+  $addToSet: {
+    tags: {
+      $each: ['adorable', 'fluffy']
+    }
+  }
+}, {multi:true})
+```
+
+### `update.$pop[field] = direction`
+
+You can remove an element from the end or start of an array using `$pop`.
+
+The `direction` must be either `1` or `-1` where `1` removes from the end, and `-1` removes from the start.
+
+```JavaScript
+await collection.update({}, {
+  $pop: {
+    fromTheBack: 1,
+    fromTheFront: -1
+  }
+}, {multi: true})
+```
+
+### `update.$pull[field] = query`
+
+You can remove all elements that match a given query using `$pull`.
+
+The `query` should match the queries used for field fields in `.find()`.
+
+```JavaScript
+// Find everyone that is cool, and remove `uncool` and `boring` from their `qualities` array.
+await collection.update({
+  isCool: true
+}, {
+  $pull: {
+    qualities: {
+      $in: ['uncool', 'boring']
+    }
   }
 })
 ```

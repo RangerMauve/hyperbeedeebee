@@ -612,3 +612,264 @@ test('Use hint API to specify the index to use', async (t) => {
     await db.close()
   }
 })
+
+test('Inserting over a document is an error', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const doc = await db.collection('example').insert({ _hello: 'world' })
+
+    try {
+      await db.collection('example').insert(doc)
+      t.fail('Did not throw an error')
+    } catch (e) {
+      t.pass('Inserting threw an error')
+    }
+  } finally {
+    await db.close()
+  }
+})
+
+test('Upsert a document', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const { nUpserted, nModified, nMatched } = await db.collection('example').update({}, {
+      hello: 'world'
+    }, { upsert: true })
+
+    t.equal(nUpserted, 1, 'Upserted a doc')
+    t.equal(nMatched, 0, 'No existing docs matched')
+    t.equal(nModified, 0, 'No existing docs modified')
+
+    const doc = await db.collection('example').findOne({ hello: 'world' })
+
+    t.ok(doc, 'Found doc')
+    t.equal(doc?.hello, 'world', 'Field got set')
+  } finally {
+    await db.close()
+  }
+})
+
+test('.update with $set, $unset, $rename', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+    const doc = await collection.insert({
+      foo: 'bar',
+      goodbye: 'world',
+      something: 'something'
+    })
+
+    const {
+      nUpserted,
+      nModified,
+      nMatched
+    } = await collection.update({}, {
+      $set: {
+        foo: 'bazz',
+        fizz: 'buzz'
+      },
+      // Set with raw fields
+      hello: 'world',
+      $unset: {
+        goodbye: ''
+      },
+      $rename: {
+        something: 'whatever'
+      }
+    })
+
+    t.equal(nUpserted, 0, 'No upserts')
+    t.equal(nMatched, 1, 'One match')
+    t.equal(nModified, 1, 'One change')
+
+    const updatedDoc = await collection.findOne({ _id: doc._id })
+
+    t.ok(updatedDoc, 'Found after updating')
+
+    t.equal(updatedDoc.foo, 'bazz', 'Existing field got updated')
+    t.equal(updatedDoc.fizz, 'buzz', 'New field got set')
+    t.equal(updatedDoc.hello, 'world', 'Raw field got set')
+    t.notOk('goodbye' in updatedDoc, 'Field got unset')
+    t.notOk('something' in updatedDoc, 'Renamed field got removed')
+    t.equal(updatedDoc.whatever, 'something', 'Field got renamed')
+  } finally {
+    await db.close()
+  }
+})
+
+test('.update with $inc, $mult', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+    const doc = await collection.insert({
+      incValue: 4,
+      multValue: 4
+    })
+
+    const {
+      nUpserted,
+      nModified,
+      nMatched
+    } = await collection.update({}, {
+      $inc: {
+        incValue: 20,
+        incSet: 666
+      },
+      $mul: {
+        multValue: 20,
+        multSet: 666
+      }
+    })
+
+    t.equal(nUpserted, 0, 'No upserts')
+    t.equal(nMatched, 1, 'One match')
+    t.equal(nModified, 1, 'One change')
+
+    const updatedDoc = await collection.findOne({ _id: doc._id })
+
+    t.ok(updatedDoc, 'Found after updating')
+    t.equal(updatedDoc?.incValue, 4 + 20, 'Value got incremented')
+    t.equal(updatedDoc?.incSet, 666, 'Unset field got set')
+
+    t.equal(updatedDoc?.multValue, 4 * 20, 'Value got multiplied')
+    t.equal(updatedDoc?.multSet, 0, 'Unset field got set to 0')
+  } finally {
+    await db.close()
+  }
+})
+
+test('.update with $push, $addToSet', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+    const doc = await collection.insert({
+      existingSet: ['a', 'b'],
+      duplicateSet: ['a', 'b'],
+      eachSet: ['a', 'b'],
+      existingPush: ['a', 'b'],
+      duplicatePush: ['a', 'b'],
+      eachPush: ['a', 'b']
+    })
+
+    const {
+      nUpserted,
+      nModified,
+      nMatched
+    } = await collection.update({}, {
+      $addToSet: {
+        existingSet: 'c',
+        duplicateSet: 'a',
+        eachSet: { $each: ['b', 'c'] }
+      },
+      $push: {
+        existingPush: 'c',
+        duplicatePush: 'a',
+        eachPush: { $each: ['b', 'c'] }
+      }
+    })
+
+    t.equal(nUpserted, 0, 'No upserts')
+    t.equal(nMatched, 1, 'One match')
+    t.equal(nModified, 1, 'One change')
+
+    const updatedDoc = await collection.findOne({ _id: doc._id })
+
+    t.ok(updatedDoc, 'Found after updating')
+
+    t.deepEqual(updatedDoc.existingSet, ['a', 'b', 'c'])
+    t.deepEqual(updatedDoc.duplicateSet, ['a', 'b'])
+    t.deepEqual(updatedDoc.eachSet, ['a', 'b', 'c'])
+
+    t.deepEqual(updatedDoc.existingPush, ['a', 'b', 'c'])
+    t.deepEqual(updatedDoc.duplicatePush, ['a', 'b', 'a'])
+    t.deepEqual(updatedDoc.eachPush, ['a', 'b', 'b', 'c'])
+  } finally {
+    await db.close()
+  }
+})
+
+test('.update multiple documents', async (t) => {
+  const db = new DB(getBee())
+
+  t.plan(4 + 3)
+
+  try {
+    const collection = db.collection('example')
+
+    await collection.insert({ value: 0 })
+    await collection.insert({ value: 0 })
+    await collection.insert({ value: 0 })
+    await collection.insert({ value: 0 })
+
+    const {
+      nUpserted,
+      nModified,
+      nMatched
+    } = await collection.update({}, {
+      $inc: {
+        value: 1
+      }
+    }, { multi: true })
+
+    t.equal(nUpserted, 0, 'No upserts')
+    t.equal(nMatched, 4, '4 matches')
+    t.equal(nModified, 4, '4 changes')
+
+    for await (const doc of collection.find()) {
+      t.equal(doc.value, 1, 'Doc got updated')
+    }
+  } finally {
+    await db.close()
+  }
+})
+
+test('.update with array of updates', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+    await collection.insert({ value: 0 })
+
+    const {
+      nUpserted,
+      nModified,
+      nMatched
+    } = await collection.update({}, [
+      { $inc: { value: 1 } },
+      { $rename: { value: 'something' } }
+    ])
+
+    t.equal(nUpserted, 0, 'No upserts')
+    t.equal(nMatched, 1, 'One match')
+    t.equal(nModified, 1, 'One change')
+
+    const doc = await collection.findOne()
+
+    t.equal(doc?.something, 1, 'field got incremented and renamed')
+  } finally {
+    await db.close()
+  }
+})
+
+/* Test template
+
+test('', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+  } finally {
+    await db.close()
+  }
+})
+*/

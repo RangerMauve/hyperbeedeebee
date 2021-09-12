@@ -7,14 +7,36 @@ const { ObjectID } = BSON
 const INDEX_VERSION = '1.0'
 
 const QUERY_TYPES = {
+  // Math stuff
   $gt: compareGt,
   $lt: compareLt,
   $gte: compareGte,
   $lte: compareLte,
+
+  // Array stuff
   $in: compareIn,
   $all: compareAll,
+
+  // Equality
   $eq: compareEq,
   $exists: compareExists
+}
+
+const UPDATE_TYPES = {
+  // Field set/unset
+  $set: updateSet,
+  $unset: updateUnset,
+  $rename: updateRename,
+
+  // Math stuff
+  $inc: updateInc,
+  $mul: updateMul,
+
+  // Array stuff
+  $addToSet: updateAddToSet,
+  $pop: updatePop,
+  $pull: updatePull,
+  $push: updatePush
 }
 
 class DB {
@@ -48,7 +70,6 @@ class Collection {
     this.idx = bee.sub('idx')
   }
 
-  // TODO: Add insertMany with batch insert
   async insert (rawDoc) {
     let doc = rawDoc
     if (!doc) throw new TypeError('No Document Supplied')
@@ -61,6 +82,11 @@ class Collection {
 
     // Get _id as buffer
     const key = doc._id.id
+
+    const exists = await this.docs.get(key)
+
+    if (exists) throw new Error('Duplicate Key error, try using .update?')
+
     const value = BSON.serialize(doc)
 
     await this.docs.put(key, value)
@@ -75,6 +101,56 @@ class Collection {
     }
 
     return doc
+  }
+
+  async update (query = {}, update = {}, options = {}) {
+    const {
+      upsert = false,
+      multi = false,
+      hint = null
+    } = options
+
+    let nMatched = 0
+    let nUpserted = 0
+    let nModified = 0
+
+    let cursor = this.find(query)
+    if (hint) cursor = cursor.hint(hint)
+    if (!multi) cursor = cursor.limit(1)
+
+    const indexes = await this.listIndexes()
+
+    for await (const doc of cursor) {
+      nMatched++
+
+      const newDoc = performUpdate(doc, update)
+
+      const key = doc._id.id
+      const value = BSON.serialize(newDoc)
+
+      await this.docs.put(key, value)
+
+      for (const { fields, name } of indexes) {
+      // TODO: Cache index subs
+        const bee = this.idx.sub(name)
+
+        await this._deIndexDocument(bee, fields, doc)
+        await this._indexDocument(bee, fields, newDoc)
+      }
+      nModified++
+    }
+
+    if (!nModified && upsert) {
+      const newDoc = performUpdate({}, update)
+      await this.insert(newDoc)
+      nUpserted++
+    }
+
+    return {
+      nMatched,
+      nUpserted,
+      nModified
+    }
   }
 
   async findOne (query = {}) {
@@ -136,11 +212,28 @@ class Collection {
   async _indexDocument (bee, fields, doc) {
     if (!hasFields(doc, fields)) return
     const idxValue = doc._id.id
-    // TODO: Batch insert the index keys
+
+    const batch = bee.batch()
+
     for (const flattened of flattenDocument(doc, fields)) {
       const idxKey = makeIndexKey(flattened, fields)
-      await bee.put(idxKey, idxValue)
+      await batch.put(idxKey, idxValue)
     }
+
+    await batch.flush()
+  }
+
+  async _deIndexDocument (bee, fields, doc) {
+    if (!hasFields(doc, fields)) return
+
+    const batch = bee.batch()
+
+    for (const flattened of flattenDocument(doc, fields)) {
+      const idxKey = makeIndexKey(flattened, fields)
+      await batch.del(idxKey)
+    }
+
+    await batch.flush()
   }
 
   // TODO: Cache indexes?
@@ -405,8 +498,23 @@ class Cursor {
   }
 }
 
+function performUpdate (doc, update) {
+  if (Array.isArray(update)) {
+    return update.reduce(performUpdate, doc)
+  }
+  const newDoc = { ...doc }
+  for (const key of Object.keys(update)) {
+    if (UPDATE_TYPES[key]) {
+      UPDATE_TYPES[key](newDoc, update[key])
+    } else {
+      newDoc[key] = update[key]
+    }
+  }
+  return newDoc
+}
+
 function matchesQuery (doc, query) {
-  for (const key in query) {
+  for (const key of Object.keys(query)) {
     const queryValue = query[key]
     const docValue = doc[key]
     if (!queryCompare(docValue, queryValue)) return false
@@ -480,6 +588,113 @@ function compareEq (docValue, queryValue) {
 
 function compareExists (docValue, queryValue) {
   return (docValue !== undefined) === queryValue
+}
+
+function updatePull (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    const value = doc[key]
+    if (!Array.isArray(value)) continue
+    const query = fields[key]
+
+    doc[key] = value.filter((item) => !queryCompare(item, query))
+  }
+}
+
+function updatePop (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    const value = doc[key]
+    if (!Array.isArray(value)) continue
+    const direction = fields[key]
+    if (direction > 0) {
+      value.pop()
+    } else if (direction < 0) {
+      value.shift()
+    }
+  }
+}
+
+function updatePush (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    const toPush = fields[key]
+    if (!(key in doc)) {
+      doc[key] = toPush
+    } else {
+      const value = doc[key]
+      if (!Array.isArray(value)) continue
+
+      if (toPush.$each) {
+        for (const item of toPush.$each) {
+          value.push(item)
+        }
+      } else {
+        value.push(toPush)
+      }
+    }
+  }
+}
+
+function updateAddToSet (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    if (!(key in doc)) {
+      doc[key] = fields[key]
+    } else {
+      const value = doc[key]
+      const toAdd = fields[key]
+
+      // if (!Array.isArray(value)) throw new Error(`Cannot use $addToSet with non-array field ${key}`)
+      if (!Array.isArray(value)) continue
+
+      if (toAdd.$each) {
+        for (const item of toAdd.$each) {
+          if (!value.includes(item)) value.push(item)
+        }
+      } else if (!value.includes(toAdd)) value.push(toAdd)
+    }
+  }
+}
+
+function updateUnset (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    delete doc[key]
+  }
+}
+
+function updateSet (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    doc[key] = fields[key]
+  }
+}
+
+function updateRename (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    if (!(key in doc)) continue
+    const name = fields[key]
+    const value = doc[key]
+    delete doc[key]
+    doc[name] = value
+  }
+}
+
+function updateInc (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    const value = fields[key]
+    if (!(key in doc)) {
+      doc[key] = value
+    } else {
+      doc[key] += value
+    }
+  }
+}
+
+function updateMul (doc, fields) {
+  for (const key of Object.keys(fields)) {
+    const value = fields[key]
+    if (!(key in doc)) {
+      doc[key] = 0
+    } else {
+      doc[key] *= value
+    }
+  }
 }
 
 function hasFields (doc, fields) {
