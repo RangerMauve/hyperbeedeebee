@@ -131,7 +131,7 @@ class Collection {
       await this.docs.put(key, value)
 
       for (const { fields, name } of indexes) {
-      // TODO: Cache index subs
+        // TODO: Cache index subs
         const bee = this.idx.sub(name)
 
         await this._deIndexDocument(bee, fields, doc)
@@ -141,7 +141,15 @@ class Collection {
     }
 
     if (!nModified && upsert) {
-      const newDoc = performUpdate({}, update)
+      const initialDoc = {}
+      for (const queryField of Object.keys(query)) {
+        const queryValue = query[queryField]
+        if ('$eq' in queryValue) initialDoc[queryField] = queryValue.$eq
+        else if (!isQueryObject(queryValue)) initialDoc[queryField] = queryValue
+      }
+
+      const newDoc = performUpdate(initialDoc, update)
+
       await this.insert(newDoc)
       nUpserted++
     }
@@ -157,6 +165,8 @@ class Collection {
     const results = await (this.find(query).limit(1))
 
     const [doc] = results
+
+    if (!doc) throw new Error('not found')
 
     return doc
   }
@@ -386,15 +396,18 @@ class Cursor {
 
       const found = await this.collection.docs.get(key)
 
-      if (!found) throw new Error('not found')
+      // Exit premaurely
+
+      if (!found) return
 
       const { value: rawDoc } = found
       if (!rawDoc) {
-        throw new Error('not found')
+        // Not found?
+        return
       }
       const doc = BSON.deserialize(rawDoc)
       if (!matchesQuery(doc, this.query)) {
-        throw new Error('not found')
+        return
       }
       yield doc
     } else {
