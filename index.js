@@ -592,7 +592,7 @@ function compareEq (docValue, queryValue) {
   if (Array.isArray(docValue)) {
     return docValue
       .some((item) => compareEq(item, queryValue))
-  } else if (typeof docValue.equals === 'function') {
+  } else if (typeof docValue?.equals === 'function') {
     return docValue.equals(queryValue)
   } else {
     return queryValue === docValue

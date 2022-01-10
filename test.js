@@ -30,6 +30,24 @@ test('Create a document in a collection', async (t) => {
   }
 })
 
+test('Create documents with sparse props', async (t) => {
+  const db = new DB(getBee())
+  try {
+    const collection = db.collection('example')
+
+    await collection.insert({ example: 'World' })
+    await collection.insert({ example: 'Hello', color: 'red' })
+
+    const doc = await collection.findOne({ color: 'red' })
+
+    t.equal(doc.color, 'red')
+
+    t.end()
+  } finally {
+    await db.close()
+  }
+})
+
 test('Iterate through all docs in a db', async (t) => {
   const db = new DB(getBee())
 
