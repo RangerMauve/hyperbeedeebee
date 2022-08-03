@@ -1,10 +1,12 @@
 const BSON = require('bson')
 const { ObjectID } = BSON
+const cbor = require('cbor')
 
 // Version of the indexing algorithm
 // Will be incremented for breaking changes
 // In the future we'll want to support multiple versions?
-const INDEX_VERSION = '1.0'
+const INDEX_VERSION = '2.0'
+const OLD_INDEX_VERSION = '1.0'
 
 const QUERY_TYPES = {
   // Math stuff
@@ -175,16 +177,21 @@ class Collection {
     return new Cursor(query, this)
   }
 
-  async createIndex (fields, { rebuild = false, ...opts } = {}) {
+  async createIndex (fields, { rebuild = false, version = INDEX_VERSION, ...opts } = {}) {
     const name = fields.join(',')
     const exists = await this.indexExists(name)
     // Don't rebuild index if it's already set
     if (exists && !rebuild) {
-      return
+      const existing = await this.getIndex(name)
+      // If the existing index is an older version, we should upgrade it
+      // If it's the same version, don't bother re building
+      if (existing.version === version) {
+        return
+      }
     }
 
     const index = {
-      version: INDEX_VERSION,
+      version,
       name,
       fields,
       opts
@@ -226,7 +233,7 @@ class Collection {
     const batch = bee.batch()
 
     for (const flattened of flattenDocument(doc, fields)) {
-      const idxKey = makeIndexKey(flattened, fields)
+      const idxKey = makeIndexKeyV2(flattened, fields)
       await batch.put(idxKey, idxValue)
     }
 
@@ -239,7 +246,7 @@ class Collection {
     const batch = bee.batch()
 
     for (const flattened of flattenDocument(doc, fields)) {
-      const idxKey = makeIndexKey(flattened, fields)
+      const idxKey = makeIndexKeyV2(flattened, fields)
       await batch.del(idxKey)
     }
 
@@ -341,7 +348,11 @@ class Cursor {
 
     const allIndexes = await this.collection.listIndexes()
     const matchingIndexes = allIndexes
-      .filter(({ fields }) => {
+      .filter(({ fields, version }) => {
+        if (version !== INDEX_VERSION && version !== OLD_INDEX_VERSION) {
+          // Only select indexes we support
+          return false
+        }
         if (sort) {
           // At the very least we _need_ to have the sort field
           const sortIndex = fields.indexOf(sort.field)
@@ -451,7 +462,16 @@ class Cursor {
 
       // If there is an index we should use
       if (bestIndex) {
-        const { index, prefixFields } = bestIndex
+        const { index, prefixFields, version } = bestIndex
+
+        let makeIndexKey = makeIndexKeyV2
+        let makeDocFromIndex = makeDocFromIndexV2
+
+        if (version === OLD_INDEX_VERSION) {
+          makeIndexKey = makeIndexKeyV1
+          makeDocFromIndex = makeDocFromIndexV1
+        }
+
         // TODO: Support $all and $in more efficiently
         // $all can't be used with just the fields in the index
         // We need to fetch the entire document to test this field
@@ -459,7 +479,7 @@ class Cursor {
           return isQueryObject(query[field]) ? !('$all' in query[field]) : true
         })
         const subQuery = getSubset(query, subQueryFields)
-        const gt = makeIndexKeyFromQuery(query, prefixFields)
+        const gt = makeIndexKeyFromQuery(query, prefixFields, index.fields, makeIndexKey)
 
         const opts = {
           reverse: (sort?.direction === -1)
@@ -714,7 +734,7 @@ function hasFields (doc, fields) {
   return fields.every((field) => (field in doc) && (field !== undefined))
 }
 
-function makeIndexKey (doc, fields) {
+function makeIndexKeyV1 (doc, fields) {
   // TODO: Does BSON array work well for ordering?
   // TODO: Maybe use a custom encoding?
   // Serialize the data into a BSON array
@@ -731,7 +751,7 @@ function makeIndexKey (doc, fields) {
   return noPrefix
 }
 
-function makeDocFromIndex (key, fields) {
+function makeDocFromIndexV1 (key, fields) {
   const buffer = Buffer.alloc(key.length + 4)
   key.copy(buffer, 4)
   // Write a valid length prefix to the buffer for BSON decoding
@@ -744,6 +764,58 @@ function makeDocFromIndex (key, fields) {
   for (const index of Object.keys(parsed)) {
     const field = fields[index] || '_id'
     doc[field] = parsed[index]
+  }
+
+  return doc
+}
+
+function makeIndexKeyV2 (doc, fields, allFields = fields) {
+  // CBOR encode fields
+  const keyValues = fields.map((field) => {
+    const value = doc[field]
+    // Detect ObjectID
+    if (value instanceof ObjectID) {
+      return value.id
+    }
+    return value
+  })
+  if (doc._id) keyValues.push(doc._id.id)
+
+  let toRemove = 0
+
+  // If the number of fields in the index is greater than what we're generating
+  // We should pad the list with some null bytes
+  // Then we should remove these bytes to get the real prefix
+  while (keyValues.length < (allFields.length + 1)) {
+    keyValues.push(0)
+    toRemove++
+  }
+
+  let key = cbor.encode(keyValues)
+
+  if (toRemove) {
+    key = key.subarray(0, key.length - toRemove)
+  }
+
+  return key
+}
+
+function makeDocFromIndexV2 (key, fields) {
+  // CBOR decode fields
+  const decoded = cbor.decode(key)
+  const doc = {}
+
+  for (const [index, value] of decoded.entries()) {
+    const field = fields[index] || '_id'
+    if (Buffer.isBuffer(value) && value.length === 12) {
+      try {
+        doc[field] = new ObjectID(value)
+      } catch {
+        doc[field] = value
+      }
+    } else {
+      doc[field] = value
+    }
   }
 
   return doc
@@ -781,13 +853,17 @@ function * flattenDocument (doc, fields) {
   if (!hadArray) yield doc
 }
 
-function makeIndexKeyFromQuery (query, fields) {
+function makeIndexKeyFromQuery (query, fields, indexFields, makeIndexKey) {
   // TODO: Account for $eq and $gt fields
   const doc = fields.reduce((res, field) => {
     const value = query[field]
 
-    if (isQueryObject(value) && ('$eq' in value)) {
-      res[field] = value.$eq
+    if (isQueryObject(value)) {
+      if ('$eq' in value) {
+        res[field] = value.$eq
+      } else if ('$gt' in value) {
+        res[field] = value.$gt
+      }
     } else {
       res[field] = value
     }
@@ -795,7 +871,7 @@ function makeIndexKeyFromQuery (query, fields) {
     return res
   }, {})
 
-  return makeIndexKey(doc, fields)
+  return makeIndexKey(doc, fields, indexFields)
 }
 
 function isQueryObject (object) {

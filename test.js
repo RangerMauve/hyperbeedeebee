@@ -272,13 +272,14 @@ test('Sort by index', async (t) => {
   try {
     await db.collection('example').createIndex(['createdAt'])
 
-    await db.collection('example').insert({ example: 1, createdAt: new Date() })
-    await db.collection('example').insert({ example: 2, createdAt: new Date() })
-    await db.collection('example').insert({ example: 3, createdAt: new Date() })
+    await db.collection('example').insert({ example: 1, createdAt: new Date(1000) })
+    await db.collection('example').insert({ example: 2, createdAt: new Date(2000) })
+    await db.collection('example').insert({ example: 3, createdAt: new Date(3000) })
 
     let counter = 3
-    for await (const { example } of db.collection('example').find().sort('createdAt', -1)) {
+    for await (const { example, createdAt } of db.collection('example').find().sort('createdAt', -1)) {
       t.equal(example, counter, 'Got doc in expected order')
+      t.equal(createdAt.getTime(), counter * 1000, 'Got expected timestamp')
       counter--
     }
 
@@ -385,6 +386,7 @@ test('Use $eq for indexes', async (t) => {
 
 test('Arrays get flattened for indexes', async (t) => {
   const db = new DB(getBee())
+
   try {
     await db.collection('example').createIndex(['ingredients', 'name'])
 
