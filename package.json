@@ -25,7 +25,8 @@
   },
   "homepage": "https://github.com/RangerMauve/hyperbeedeebee#readme",
   "dependencies": {
-    "bson": "^4.3.0"
+    "bson": "^4.3.0",
+    "cbor": "^8.1.0"
   },
   "devDependencies": {
     "hyperbee": "^1.5.4",
