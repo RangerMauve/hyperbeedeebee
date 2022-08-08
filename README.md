@@ -1,8 +1,6 @@
 # hyperbeedeebee
 A MongoDB-like database built on top of Hyperbee with support for indexing
 
-**WIP:** There may be breaking changes in the indexing before the v1.0.0 release, don't use this for anything you don't mind migrating in the future.
-
 Based on [this design](https://gist.github.com/RangerMauve/ae271204054b62d9a649d70b7d218191)
 
 ## Usage
