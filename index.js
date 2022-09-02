@@ -20,6 +20,7 @@ const QUERY_TYPES = {
   $all: compareAll,
 
   // Equality
+  $ne: compareNe,
   $eq: compareEq,
   $exists: compareExists
 }
@@ -601,6 +602,10 @@ function compareGte (docValue, queryValue) {
 
 function compareLte (docValue, queryValue) {
   return ensureComparable(docValue) <= ensureComparable(queryValue)
+}
+
+function compareNe (docValue, queryValue) {
+  return ensureComparable(docValue) !== ensureComparable(queryValue)
 }
 
 function ensureComparable (value) {

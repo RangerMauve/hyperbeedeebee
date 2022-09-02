@@ -142,9 +142,6 @@ test('Iterate through different collections of different base', async (t) => {
   const db2 = new DB(base2)
 
   try {
-    // await db.collection('example').insert({ example: 'Hello' })
-    // await db.collection('example').insert({ example: 'World' })
-
     const doc1 = await db.collection('patras').insert({ example: 'Hello' })
     const doc2 = await db.collection('patras').insert({ example: 'World' })
 
@@ -248,13 +245,13 @@ test('Search by number fields', async (t) => {
 
     t.equal(found3.length, 1, 'Found 1 document < 10')
 
-    // const found4 = await db.collection('example').find({
-    // example: {
-    // $ne: 666
-    // }
-    // })
+    const found4 = await db.collection('example').find({
+      example: {
+        $ne: 666
+      }
+    })
 
-    // t.equal(found4.length, 3, 'Found 3 document =! 666')
+    t.equal(found4.length, 3, 'Found 3 document =! 666')
 
     t.end()
   } finally {
