@@ -1,7 +1,7 @@
 const Hyperbee = require('hyperbee')
 const b4a = require('b4a')
 
-module.exports = class SimpleAutobee {
+module.exports = class Autodeebee {
   constructor (autobase, opts) {
     this.autobase = autobase
     this.opts = opts
@@ -34,7 +34,7 @@ module.exports = class SimpleAutobee {
   sub (name) {
     const opts = this.opts ?? {}
     opts.sub = true
-    const auto = new SimpleAutobee(this.autobase, opts)
+    const auto = new Autodeebee(this.autobase, opts)
     auto.bee = this.bee.sub(name)
     return auto
   }

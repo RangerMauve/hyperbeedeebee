@@ -72,14 +72,14 @@ const eggbert = await db.collection('example').findOne({name: 'Eggbert'})
     localOutput: firstOutput,
     localInput: firstUser
   })
-  const autobee = new SimpleAutobee(base)
+  const autobee = new Autodeebee(base)
 
   // Create a new DB
   const db = new DB(autobee)
   // You can then use the DB the same way as you did above.
 ```
 
-You also need to use the [Autobee class](./autobee.js):
+You also need to use the [Autodeebee class](./autodeebee.js):
 This class redefines the functions of Hyperbee to be compatible with the DB.
 
 ## Data Types

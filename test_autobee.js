@@ -3,7 +3,7 @@ const RAM = require('random-access-memory')
 const Hypercore = require('hypercore')
 const Autobase = require('autobase')
 const HyperbeeDeeBee = require('./')
-const SimpleAutobee = require('./autobee')
+const Autodeebee = require('./autodeebee')
 const { DB } = HyperbeeDeeBee
 
 function getBee () {
@@ -16,7 +16,7 @@ function getBee () {
     localOutput: firstOutput,
     localInput: firstUser
   })
-  return new SimpleAutobee(base1)
+  return new Autodeebee(base1)
 }
 // eslint-disable-next-line no-unused-vars
 function getBees () {
@@ -38,7 +38,7 @@ function getBees () {
     localInput: secondUser
   })
 
-  return [new SimpleAutobee(base1), new SimpleAutobee(base2)]
+  return [new Autodeebee(base1), new Autodeebee(base2)]
 }
 
 test('Create a document in a collection', async (t) => {
