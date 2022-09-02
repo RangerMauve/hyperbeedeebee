@@ -59,7 +59,7 @@ class DB {
 
   async close () {
     // TODO: This looks kinda stange. PR a close method on bee?
-    return this.bee.feed.close()
+    return this.bee.close()
   }
 }
 

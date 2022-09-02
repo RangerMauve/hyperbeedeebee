@@ -1,4 +1,5 @@
 # hyperbeedeebee
+
 A MongoDB-like database built on top of Hyperbee with support for indexing
 
 Based on [this design](https://gist.github.com/RangerMauve/ae271204054b62d9a649d70b7d218191)
@@ -59,6 +60,28 @@ const killbots = await db.collection('example')
 const eggbert = await db.collection('example').findOne({name: 'Eggbert'})
 ```
 
+### Usage with Autobase
+
+```JavaScript
+  const input = new Hypercore(RAM)
+  const output = new Hypercore(RAM)
+  const inputs = [input]
+
+  const base = new Autobase({
+    inputs,
+    localOutput: firstOutput,
+    localInput: firstUser
+  })
+  const autobee = new SimpleAutobee(base)
+
+  // Create a new DB
+  const db = new DB(autobee)
+  // You can then use the DB the same way as you did above.
+```
+
+You also need to use the [Autobee class](./autobee.js):
+This class redefines the functions of Hyperbee to be compatible with the DB.
+
 ## Data Types
 
 HyperbeeDeeBee uses MongoDB's [BSON](https://github.com/mongodb/js-bson) data types for encoding data.
@@ -87,6 +110,7 @@ BSONRegExp,
 BSONSymbol,
 Timestamp
 ```
+
 ## Important Differences From MongoDB
 
 - There is a single writer for a hyperbee and multiple readers
