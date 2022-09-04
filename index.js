@@ -107,11 +107,7 @@ class Collection {
   }
 
   async update (query = {}, update = {}, options = {}) {
-    const {
-      upsert = false,
-      multi = false,
-      hint = null
-    } = options
+    const { upsert = false, multi = false, hint = null } = options
 
     let nMatched = 0
     let nUpserted = 0
@@ -148,7 +144,9 @@ class Collection {
       for (const queryField of Object.keys(query)) {
         const queryValue = query[queryField]
         if ('$eq' in queryValue) initialDoc[queryField] = queryValue.$eq
-        else if (!isQueryObject(queryValue)) initialDoc[queryField] = queryValue
+        else if (!isQueryObject(queryValue)) {
+          initialDoc[queryField] = queryValue
+        }
       }
 
       const newDoc = performUpdate(initialDoc, update)
@@ -164,8 +162,39 @@ class Collection {
     }
   }
 
+  async delete (query = {}, options = {}) {
+    const { multi = false, hint = null } = options
+
+    let nDeleted = 0
+
+    let cursor = this.find(query)
+    if (hint) cursor = cursor.hint(hint)
+    if (!multi) cursor = cursor.limit(1)
+
+    const indexes = await this.listIndexes()
+
+    for await (const doc of cursor) {
+      nDeleted++
+
+      const key = doc._id.id
+
+      await this.docs.del(key)
+
+      for (const { fields, name } of indexes) {
+        // TODO: Cache index subs
+        const bee = this.idx.sub(name)
+
+        await this._deIndexDocument(bee, fields, doc)
+      }
+    }
+
+    return {
+      nDeleted
+    }
+  }
+
   async findOne (query = {}) {
-    const results = await (this.find(query).limit(1))
+    const results = await this.find(query).limit(1)
 
     const [doc] = results
 
@@ -178,7 +207,10 @@ class Collection {
     return new Cursor(query, this)
   }
 
-  async createIndex (fields, { rebuild = false, version = INDEX_VERSION, ...opts } = {}) {
+  async createIndex (
+    fields,
+    { rebuild = false, version = INDEX_VERSION, ...opts } = {}
+  ) {
     const name = fields.join(',')
     const exists = await this.indexExists(name)
     // Don't rebuild index if it's already set
@@ -269,12 +301,16 @@ class Collection {
 }
 
 class Cursor {
-  constructor (query = {}, collection, opts = {
-    limit: Infinity,
-    skip: 0,
-    sort: null,
-    hint: null
-  }) {
+  constructor (
+    query = {},
+    collection,
+    opts = {
+      limit: Infinity,
+      skip: 0,
+      sort: null,
+      hint: null
+    }
+  ) {
     this.query = query
     this.collection = collection
     // TODO: Validate opts
@@ -320,12 +356,14 @@ class Cursor {
     const queryFields = Object.keys(query)
     // Filter out fields with `$exists: false` since we can't index non-existance
     const existingFields = queryFields.filter((field) => {
-      return isQueryObject(query[field]) ? query[field].$exists !== false : true
+      return isQueryObject(query[field])
+        ? query[field].$exists !== false
+        : true
     })
     const eqS = existingFields.filter((name) => {
       const queryValue = query[name]
       if (!isQueryObject(queryValue)) return true
-      return ('$eq' in queryValue)
+      return '$eq' in queryValue
     })
 
     if (hint) {
@@ -333,9 +371,13 @@ class Cursor {
       const { fields } = hintIndex
       if (sort) {
         const sortIndex = fields.indexOf(sort.field)
-        if (sortIndex === -1) throw new Error("Hinted Index doesn't match required sort")
+        if (sortIndex === -1) {
+          throw new Error("Hinted Index doesn't match required sort")
+        }
         const consecutive = consecutiveSubset(fields, eqS)
-        if (consecutive !== sortIndex) throw new Error("Hinted index doesn't match required sort")
+        if (consecutive !== sortIndex) {
+          throw new Error("Hinted index doesn't match required sort")
+        }
       }
 
       const prefixFields = fields.slice(0, consecutiveSubset(fields, eqS))
@@ -368,7 +410,9 @@ class Cursor {
       })
       // Sort by most $eq fields at the beginning
       .sort(({ fields: fieldsA }, { fields: fieldsB }) => {
-        return consecutiveSubset(fieldsB, eqS) - consecutiveSubset(fieldsA, eqS)
+        return (
+          consecutiveSubset(fieldsB, eqS) - consecutiveSubset(fieldsA, eqS)
+        )
       })
 
     // The best is the one with the most eqS
@@ -402,7 +446,7 @@ class Cursor {
   }
 
   async * [Symbol.asyncIterator] () {
-    if (this.query._id && (this.query._id instanceof ObjectID)) {
+    if (this.query._id && this.query._id instanceof ObjectID) {
       // Doc IDs are unique, so we can query against them without doing a search
       const key = this.query._id.id
 
@@ -423,11 +467,7 @@ class Cursor {
       }
       yield doc
     } else {
-      const {
-        limit = Infinity,
-        skip = 0,
-        sort
-      } = this.opts
+      const { limit = Infinity, skip = 0, sort } = this.opts
       const query = this.query
       const seen = new Set()
 
@@ -480,10 +520,15 @@ class Cursor {
           return isQueryObject(query[field]) ? !('$all' in query[field]) : true
         })
         const subQuery = getSubset(query, subQueryFields)
-        const gt = makeIndexKeyFromQuery(query, prefixFields, index.fields, makeIndexKey)
+        const gt = makeIndexKeyFromQuery(
+          query,
+          prefixFields,
+          index.fields,
+          makeIndexKey
+        )
 
         const opts = {
-          reverse: (sort?.direction === -1)
+          reverse: sort?.direction === -1
         }
         if (gt && gt.length) {
           opts.gt = gt
@@ -493,10 +538,12 @@ class Cursor {
           gt.copy(lt)
 
           // Set to MAX byte to only use keys with this prefix
-          lt[lt.length - 1] = 0xFF
+          lt[lt.length - 1] = 0xff
         }
 
-        const stream = this.collection.idx.sub(index.name).createReadStream(opts)
+        const stream = this.collection.idx
+          .sub(index.name)
+          .createReadStream(opts)
 
         for await (const { key, value: rawId } of stream) {
           const keyDoc = makeDocFromIndex(key, index.fields)
@@ -570,9 +617,13 @@ function queryCompare (docValue, queryValue) {
 
 function compareAll (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(queryValue)) throw new Error('$all must be set to an array')
+  if (!Array.isArray(queryValue)) {
+    throw new Error('$all must be set to an array')
+  }
   if (Array.isArray(docValue)) {
-    return queryValue.every((fromQuery) => docValue.some((fromDoc) => compareEq(fromDoc, fromQuery)))
+    return queryValue.every((fromQuery) =>
+      docValue.some((fromDoc) => compareEq(fromDoc, fromQuery))
+    )
   } else {
     return false
   }
@@ -580,9 +631,13 @@ function compareAll (docValue, queryValue) {
 
 function compareIn (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(queryValue)) throw new Error('$in must be set to an array')
+  if (!Array.isArray(queryValue)) {
+    throw new Error('$in must be set to an array')
+  }
   if (Array.isArray(docValue)) {
-    return docValue.some((fromDoc) => queryValue.some((fromQuery) => compareEq(fromDoc, fromQuery)))
+    return docValue.some((fromDoc) =>
+      queryValue.some((fromQuery) => compareEq(fromDoc, fromQuery))
+    )
   } else {
     return queryValue.some((fromQuery) => compareEq(docValue, fromQuery))
   }
@@ -615,8 +670,7 @@ function ensureComparable (value) {
 
 function compareEq (docValue, queryValue) {
   if (Array.isArray(docValue)) {
-    return docValue
-      .some((item) => compareEq(item, queryValue))
+    return docValue.some((item) => compareEq(item, queryValue))
   } else if (typeof docValue?.equals === 'function') {
     return docValue.equals(queryValue)
   } else {
@@ -736,7 +790,7 @@ function updateMul (doc, fields) {
 }
 
 function hasFields (doc, fields) {
-  return fields.every((field) => (field in doc) && (field !== undefined))
+  return fields.every((field) => field in doc && field !== undefined)
 }
 
 function makeIndexKeyV1 (doc, fields) {
@@ -745,7 +799,8 @@ function makeIndexKeyV1 (doc, fields) {
   // Serialize the data into a BSON array
   const buffer = BSON.serialize(
     // Take all the indexed fields
-    fields.map((field) => doc[field])
+    fields
+      .map((field) => doc[field])
       // Add the document ID
       .concat(doc._id || [])
   )
@@ -791,7 +846,7 @@ function makeIndexKeyV2 (doc, fields, allFields = fields) {
   // If the number of fields in the index is greater than what we're generating
   // We should pad the list with some null bytes
   // Then we should remove these bytes to get the real prefix
-  while (keyValues.length < (allFields.length + 1)) {
+  while (keyValues.length < allFields.length + 1) {
     keyValues.push(0)
     toRemove++
   }
@@ -880,7 +935,7 @@ function makeIndexKeyFromQuery (query, fields, indexFields, makeIndexKey) {
 }
 
 function isQueryObject (object) {
-  return (typeof object === 'object') && has$Keys(object)
+  return typeof object === 'object' && has$Keys(object)
 }
 
 function has$Keys (object) {

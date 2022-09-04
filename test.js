@@ -650,6 +650,34 @@ test('Inserting over a document is an error', async (t) => {
   }
 })
 
+test('.delete a document', async (t) => {
+  const db = new DB(getBee())
+
+  try {
+    const collection = db.collection('example')
+
+    const doc = await collection.insert({
+      foo: 'bar',
+      goodbye: 'world',
+      something: 'something'
+    })
+
+    const {
+      nDeleted
+    } = await collection.delete({ foo: 'bar' })
+
+    t.equal(nDeleted, 1, 'One match')
+
+    try {
+      await collection.findOne({ _id: doc._id })
+      t.fail('Did not throw an error')
+    } catch (e) {
+      t.pass('Retrieving deleted doc threw an error')
+    }
+  } finally {
+    await db.close()
+  }
+})
 test('Upsert a document', async (t) => {
   const db = new DB(getBee())
 
