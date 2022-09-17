@@ -7,8 +7,10 @@ const Autobase = require('autobase')
 const Autodeebee = require('autodeebee')
 const { DB } = HyperbeeDeeBee
 
+const bothData = ['hyperbee', 'autobee']
+
 function getBee () {
-  return {hyperbee: new Hyperbee(new Hypercore(RAM)), autobee: getAutoBee()}
+  return new Hyperbee(new Hypercore(RAM))
 }
 
 function getAutoBee () {
@@ -47,10 +49,9 @@ function getAutoBees () {
 }
 
 test('Create a document in a collection', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
@@ -72,10 +73,9 @@ test('Create a document in a collection', async (t) => {
 })
 
 test('Create documents with sparse props', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
@@ -94,10 +94,9 @@ test('Create documents with sparse props', async (t) => {
 })
 
 test('Iterate through all docs in a db', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const doc1 = await db.collection('example').insert({ example: 'Hello' })
       const doc2 = await db.collection('example').insert({ example: 'World' })
@@ -181,10 +180,9 @@ test('Iterate through different collections of different base', async (t) => {
   }
 })
 test('Limit and Skip', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     const NUM_TO_MAKE = 30
     let i = NUM_TO_MAKE
     try {
@@ -214,10 +212,9 @@ test('Limit and Skip', async (t) => {
 })
 
 test('Search by field equal', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const doc1 = await db.collection('example').insert({ example: 'Hello' })
       const doc2 = await db.collection('example').insert({ example: ['Hello', 'World'] })
@@ -237,10 +234,9 @@ test('Search by field equal', async (t) => {
 })
 
 test('Search by number fields', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').insert({ example: 4 })
       await db.collection('example').insert({ example: 20 })
@@ -280,10 +276,9 @@ test('Search by number fields', async (t) => {
 })
 
 test('Search by date fields', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').insert({ example: new Date(2000, 0) })
       await db.collection('example').insert({ example: new Date(2000, 2) })
@@ -307,10 +302,9 @@ test('Search by date fields', async (t) => {
 })
 
 test('Search using $in and $all', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').insert({ example: [1, 3, 5, 7, 9] })
       await db.collection('example').insert({ example: [2, 3, 6, 8, 10] })
@@ -341,10 +335,9 @@ test('Search using $in and $all', async (t) => {
 })
 
 test('Search using $exists', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').insert({ example: 'wow' })
       await db.collection('example').insert({ nothing: 'here' })
@@ -369,10 +362,9 @@ test('Search using $exists', async (t) => {
 })
 
 test('Create indexes and list them', async (t) => {
-  const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').insert({ example: 1, createdAt: new Date() })
   
@@ -396,10 +388,9 @@ test('Create indexes and list them', async (t) => {
 })
 
 test('Sort by index', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['createdAt'])
   
@@ -424,10 +415,9 @@ test('Sort by index', async (t) => {
 })
 
 test('Cannot sort without index', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       try {
         await db.collection('example').find().sort('notfound')
@@ -443,10 +433,9 @@ test('Cannot sort without index', async (t) => {
 })
 
 test('Limit and skip with index sort', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     const NUM_TO_MAKE = 30
     let i = NUM_TO_MAKE
     try {
@@ -485,10 +474,9 @@ test('Limit and skip with index sort', async (t) => {
 })
 
 test('Use $eq for indexes', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const indexFields = ['color', 'flavor']
       await db.collection('example').createIndex(indexFields)
@@ -529,10 +517,9 @@ test('Use $eq for indexes', async (t) => {
 })
 
 test('Arrays get flattened for indexes', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['ingredients', 'name'])
   
@@ -572,10 +559,9 @@ test('Arrays get flattened for indexes', async (t) => {
 })
 
 test('Indexed Search using $exists', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['example'])
   
@@ -608,10 +594,9 @@ test('Indexed Search using $exists', async (t) => {
 })
 
 test('Indexed Search by date fields (with sort)', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['example'])
       await db.collection('example').insert({ example: new Date(2000, 0) })
@@ -642,10 +627,9 @@ test('Indexed Search by date fields (with sort)', async (t) => {
 })
 
 test('Indexed Search using $in and $all with numbers', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['example'])
   
@@ -691,10 +675,9 @@ test('Indexed Search using $in and $all with numbers', async (t) => {
 })
 
 test('Indexed Search using $in and $all with string', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['example'])
   
@@ -739,10 +722,9 @@ test('Indexed Search using $in and $all with string', async (t) => {
 })
 
 test('Indexed text search using sort and $all', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['index', 'example'])
   
@@ -764,10 +746,9 @@ test('Indexed text search using sort and $all', async (t) => {
 })
 
 test('Use hint API to specify the index to use', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       await db.collection('example').createIndex(['example'])
       await db.collection('example').createIndex(['createdAt'])
@@ -799,10 +780,9 @@ test('Use hint API to specify the index to use', async (t) => {
 })
 
 test('Inserting over a document is an error', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const doc = await db.collection('example').insert({ _hello: 'world' })
   
@@ -848,10 +828,9 @@ test('.delete a document', async (t) => {
 })
 
 test('Upsert a document', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const { nUpserted, nModified, nMatched } = await db.collection('example').update({}, {
         hello: 'world'
@@ -872,10 +851,9 @@ test('Upsert a document', async (t) => {
 })
 
 test('.update with $set, $unset, $rename', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
@@ -925,10 +903,9 @@ test('.update with $set, $unset, $rename', async (t) => {
 })
 
 test('.update with $inc, $mult', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
@@ -971,10 +948,9 @@ test('.update with $inc, $mult', async (t) => {
 })
 
 test('.update with $push, $addToSet', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
@@ -1026,10 +1002,9 @@ test('.update with $push, $addToSet', async (t) => {
 })
 
 test('.update multiple documents', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     t.plan(4 + 3)
 
     try {
@@ -1064,10 +1039,9 @@ test('.update multiple documents', async (t) => {
 })
 
 test('.update with array of updates', async (t) => {
-    const mainDB = getBee()
-  for(const test in mainDB){
+  for(const test of bothData){
     console.log(test)
-    const db = new DB(mainDB[test])
+    const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
       const collection = db.collection('example')
   
