@@ -53,9 +53,9 @@ test('Create a document in a collection', async (t) => {
     console.log(test)
     const db = test === 'hyperbee' ? new DB(getBee()) : new DB(getAutoBee())
     try {
-      const collection = db.collection('example')
+      const collection = db.collection(test)
   
-      t.equal(collection.name, 'example', 'Collection created')
+      t.equal(collection.name, test, 'Collection created')
   
       const doc = await collection.insert({ example: 'Hello World!' })
   
@@ -64,12 +64,12 @@ test('Create a document in a collection', async (t) => {
       const otherDoc = await collection.findOne({ _id: doc._id })
   
       t.equal(otherDoc.example, doc.example, 'DB property got loaded')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Create documents with sparse props', async (t) => {
@@ -85,12 +85,12 @@ test('Create documents with sparse props', async (t) => {
       const doc = await collection.findOne({ color: 'red' })
   
       t.equal(doc.color, 'red')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Iterate through all docs in a db', async (t) => {
@@ -114,12 +114,12 @@ test('Iterate through all docs in a db', async (t) => {
           t.ok(doc._id.equals(doc2._id), 'Got same id when iterating (2)')
         }
       }
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 test('Iterate through different collections', async (t) => {
   const db = new DB(getAutoBee())
@@ -203,12 +203,12 @@ test('Limit and Skip', async (t) => {
       const expected = [19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
   
       t.deepEqual(onlyIs, expected, 'Got expected subset of Ids')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Search by field equal', async (t) => {
@@ -225,12 +225,12 @@ test('Search by field equal', async (t) => {
       t.equal(found.length, 2, 'Found 2 documents')
       t.ok(doc1._id.equals(found[0]._id), 'Got matched field document')
       t.ok(doc2._id.equals(found[1]._id), 'Got matched array field document')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Search by number fields', async (t) => {
@@ -267,12 +267,12 @@ test('Search by number fields', async (t) => {
       })
   
       t.equal(found3.length, 1, 'Found 1 document < 10')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Search by date fields', async (t) => {
@@ -293,12 +293,12 @@ test('Search by date fields', async (t) => {
       })
   
       t.equal(found1.length, 2, 'Found 2 document >= Feb and <= July')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Search using $in and $all', async (t) => {
@@ -326,12 +326,12 @@ test('Search using $in and $all', async (t) => {
       })
   
       t.equal(found2.length, 1, 'Found 1 matching document')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Search using $exists', async (t) => {
@@ -353,12 +353,12 @@ test('Search using $exists', async (t) => {
       })
   
       t.equal(results2.length, 1, 'Found document without field')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Create indexes and list them', async (t) => {
@@ -379,12 +379,12 @@ test('Create indexes and list them', async (t) => {
       await db.collection('example').insert({ example: 2, createdAt: new Date() })
   
       t.ok('Able to insert document with index')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Sort by index', async (t) => {
@@ -406,12 +406,12 @@ test('Sort by index', async (t) => {
       }
   
       t.equal(counter, 0, 'Sorted through all 3 documents')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Cannot sort without index', async (t) => {
@@ -424,12 +424,12 @@ test('Cannot sort without index', async (t) => {
       } catch {
         t.pass('Threw error when sorting without index')
       }
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Limit and skip with index sort', async (t) => {
@@ -465,12 +465,12 @@ test('Limit and skip with index sort', async (t) => {
       const expected = [19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
   
       t.deepEqual(onlyIs, expected, 'Got expected subset of Ids')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Use $eq for indexes', async (t) => {
@@ -508,12 +508,12 @@ test('Use $eq for indexes', async (t) => {
   
       t.equal(sorted.length, 2, 'Got expected documents when sorting')
       t.equal(sorted[0]?.flavor, 'watermelon', 'Got expected order for sort')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Arrays get flattened for indexes', async (t) => {
@@ -550,12 +550,12 @@ test('Arrays get flattened for indexes', async (t) => {
   
       t.equal(results.length, 2, 'Found two matching documents')
       t.equal(results[0]?.name, 'cheeseland', 'Documents got sorted correctly')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Indexed Search using $exists', async (t) => {
@@ -585,12 +585,12 @@ test('Indexed Search using $exists', async (t) => {
       })
   
       t.equal(results2.length, 1, 'Found document without field')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Indexed Search by date fields (with sort)', async (t) => {
@@ -618,12 +618,12 @@ test('Indexed Search by date fields (with sort)', async (t) => {
       const found1 = await query
   
       t.equal(found1.length, 2, 'Found 2 documents >= Feb and <= July')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Indexed Search using $in and $all with numbers', async (t) => {
@@ -666,12 +666,12 @@ test('Indexed Search using $in and $all with numbers', async (t) => {
       const found2 = await query2
   
       t.equal(found2.length, 1, 'Found 1 matching document')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Indexed Search using $in and $all with string', async (t) => {
@@ -713,12 +713,12 @@ test('Indexed Search using $in and $all with string', async (t) => {
       const found2 = await query2
   
       t.equal(found2.length, 1, 'Found 1 matching document')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Indexed text search using sort and $all', async (t) => {
@@ -738,11 +738,12 @@ test('Indexed text search using sort and $all', async (t) => {
       })
   
       t.equal(results1.length, 2, 'Matched two documents for $all')
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Use hint API to specify the index to use', async (t) => {
@@ -771,12 +772,12 @@ test('Use hint API to specify the index to use', async (t) => {
         .getIndex()
   
       t.equal(chosen2?.index?.name, 'createdAt', 'Hinted index got used')
-  
-      t.end()
+
     } finally {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('Inserting over a document is an error', async (t) => {
@@ -796,6 +797,7 @@ test('Inserting over a document is an error', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.delete a document', async (t) => {
@@ -822,6 +824,7 @@ test('.delete a document', async (t) => {
     } catch (e) {
       t.pass('Retrieving deleted doc threw an error')
     }
+    t.end()
   } finally {
     await db.close()
   }
@@ -848,6 +851,7 @@ test('Upsert a document', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.update with $set, $unset, $rename', async (t) => {
@@ -900,6 +904,7 @@ test('.update with $set, $unset, $rename', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.update with $inc, $mult', async (t) => {
@@ -945,6 +950,7 @@ test('.update with $inc, $mult', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.update with $push, $addToSet', async (t) => {
@@ -999,6 +1005,7 @@ test('.update with $push, $addToSet', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.update multiple documents', async (t) => {
@@ -1036,6 +1043,7 @@ test('.update multiple documents', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 test('.update with array of updates', async (t) => {
@@ -1067,6 +1075,7 @@ test('.update with array of updates', async (t) => {
       await db.close()
     }
   }
+  t.end()
 })
 
 /* Test template
