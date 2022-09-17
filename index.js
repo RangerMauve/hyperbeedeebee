@@ -163,6 +163,37 @@ class Collection {
     }
   }
 
+  async delete (query = {}, options = {}) {
+    const { multi = false, hint = null } = options
+
+    let nDeleted = 0
+
+    let cursor = this.find(query)
+    if (hint) cursor = cursor.hint(hint)
+    if (!multi) cursor = cursor.limit(1)
+
+    const indexes = await this.listIndexes()
+
+    for await (const doc of cursor) {
+      nDeleted++
+
+      const key = doc._id.id
+
+      await this.docs.del(key)
+
+      for (const { fields, name } of indexes) {
+        // TODO: Cache index subs
+        const bee = this.idx.sub(name)
+
+        await this._deIndexDocument(bee, fields, doc)
+      }
+    }
+
+    return {
+      nDeleted
+    }
+  }
+
   async findOne (query = {}) {
     const results = await (this.find(query).limit(1))
 
@@ -601,6 +632,10 @@ function compareGte (docValue, queryValue) {
 
 function compareLte (docValue, queryValue) {
   return ensureComparable(docValue) <= ensureComparable(queryValue)
+}
+
+function compareNe (docValue, queryValue) {
+  return ensureComparable(docValue) !== ensureComparable(queryValue)
 }
 
 function ensureComparable (value) {
