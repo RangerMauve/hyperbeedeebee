@@ -20,6 +20,7 @@ const QUERY_TYPES = {
   $all: compareAll,
 
   // Equality
+  $ne: compareNe,
   $eq: compareEq,
   $exists: compareExists
 }
@@ -59,7 +60,7 @@ class DB {
 
   async close () {
     // TODO: This looks kinda stange. PR a close method on bee?
-    return this.bee.feed.close()
+    return this.bee.close()
   }
 }
 
@@ -106,11 +107,7 @@ class Collection {
   }
 
   async update (query = {}, update = {}, options = {}) {
-    const {
-      upsert = false,
-      multi = false,
-      hint = null
-    } = options
+    const { upsert = false, multi = false, hint = null } = options
 
     let nMatched = 0
     let nUpserted = 0
@@ -147,7 +144,9 @@ class Collection {
       for (const queryField of Object.keys(query)) {
         const queryValue = query[queryField]
         if ('$eq' in queryValue) initialDoc[queryField] = queryValue.$eq
-        else if (!isQueryObject(queryValue)) initialDoc[queryField] = queryValue
+        else if(!isQueryObject(queryValue)){
+          initialDoc[queryField] = queryValue
+        }
       }
 
       const newDoc = performUpdate(initialDoc, update)
@@ -268,12 +267,7 @@ class Collection {
 }
 
 class Cursor {
-  constructor (query = {}, collection, opts = {
-    limit: Infinity,
-    skip: 0,
-    sort: null,
-    hint: null
-  }) {
+  constructor (query = {}, collection, opts = { limit: Infinity, skip: 0, sort: null, hint: null }){
     this.query = query
     this.collection = collection
     // TODO: Validate opts
@@ -324,7 +318,7 @@ class Cursor {
     const eqS = existingFields.filter((name) => {
       const queryValue = query[name]
       if (!isQueryObject(queryValue)) return true
-      return ('$eq' in queryValue)
+      return '$eq' in queryValue
     })
 
     if (hint) {
@@ -332,9 +326,13 @@ class Cursor {
       const { fields } = hintIndex
       if (sort) {
         const sortIndex = fields.indexOf(sort.field)
-        if (sortIndex === -1) throw new Error("Hinted Index doesn't match required sort")
+        if (sortIndex === -1){
+          throw new Error("Hinted Index doesn't match required sort")
+        }
         const consecutive = consecutiveSubset(fields, eqS)
-        if (consecutive !== sortIndex) throw new Error("Hinted index doesn't match required sort")
+        if (consecutive !== sortIndex){
+          throw new Error("Hinted index doesn't match required sort")
+        }
       }
 
       const prefixFields = fields.slice(0, consecutiveSubset(fields, eqS))
@@ -401,7 +399,7 @@ class Cursor {
   }
 
   async * [Symbol.asyncIterator] () {
-    if (this.query._id && (this.query._id instanceof ObjectID)) {
+    if (this.query._id && this.query._id instanceof ObjectID) {
       // Doc IDs are unique, so we can query against them without doing a search
       const key = this.query._id.id
 
@@ -422,11 +420,7 @@ class Cursor {
       }
       yield doc
     } else {
-      const {
-        limit = Infinity,
-        skip = 0,
-        sort
-      } = this.opts
+      const { limit = Infinity, skip = 0, sort } = this.opts
       const query = this.query
       const seen = new Set()
 
@@ -482,7 +476,7 @@ class Cursor {
         const gt = makeIndexKeyFromQuery(query, prefixFields, index.fields, makeIndexKey)
 
         const opts = {
-          reverse: (sort?.direction === -1)
+          reverse: sort?.direction === -1
         }
         if (gt && gt.length) {
           opts.gt = gt
@@ -569,7 +563,9 @@ function queryCompare (docValue, queryValue) {
 
 function compareAll (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(queryValue)) throw new Error('$all must be set to an array')
+  if (!Array.isArray(queryValue)){
+    throw new Error('$all must be set to an array')
+  }
   if (Array.isArray(docValue)) {
     return queryValue.every((fromQuery) => docValue.some((fromDoc) => compareEq(fromDoc, fromQuery)))
   } else {
@@ -579,7 +575,9 @@ function compareAll (docValue, queryValue) {
 
 function compareIn (docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
-  if (!Array.isArray(queryValue)) throw new Error('$in must be set to an array')
+  if (!Array.isArray(queryValue)){
+    throw new Error('$in must be set to an array')
+  }
   if (Array.isArray(docValue)) {
     return docValue.some((fromDoc) => queryValue.some((fromQuery) => compareEq(fromDoc, fromQuery)))
   } else {
@@ -610,8 +608,7 @@ function ensureComparable (value) {
 
 function compareEq (docValue, queryValue) {
   if (Array.isArray(docValue)) {
-    return docValue
-      .some((item) => compareEq(item, queryValue))
+    return docValue.some((item) => compareEq(item, queryValue))
   } else if (typeof docValue?.equals === 'function') {
     return docValue.equals(queryValue)
   } else {
@@ -731,7 +728,7 @@ function updateMul (doc, fields) {
 }
 
 function hasFields (doc, fields) {
-  return fields.every((field) => (field in doc) && (field !== undefined))
+  return fields.every((field) => field in doc && field !== undefined)
 }
 
 function makeIndexKeyV1 (doc, fields) {
@@ -875,7 +872,7 @@ function makeIndexKeyFromQuery (query, fields, indexFields, makeIndexKey) {
 }
 
 function isQueryObject (object) {
-  return (typeof object === 'object') && has$Keys(object)
+  return typeof object === 'object' && has$Keys(object)
 }
 
 function has$Keys (object) {
