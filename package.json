@@ -25,6 +25,8 @@
   },
   "homepage": "https://github.com/RangerMauve/hyperbeedeebee#readme",
   "dependencies": {
+    "autobase": "github:hypercore-protocol/autobase",
+    "autodeebee": "^1.0.1",
     "bson": "^4.3.0",
     "cbor": "^8.1.0"
   },
