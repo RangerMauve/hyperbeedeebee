@@ -3,6 +3,8 @@ const RAM = require('random-access-memory')
 const Hypercore = require('hypercore')
 const Hyperbee = require('hyperbee')
 const HyperbeeDeeBee = require('./')
+const Autobase = require('autobase')
+const Autodeebee = require('autodeebee')
 const { DB } = HyperbeeDeeBee
 
 function getBee () {
