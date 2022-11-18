@@ -42,13 +42,26 @@ const UPDATE_TYPES = {
   $push: updatePush
 }
 
+class NoDocumentSuppliedError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = this.constructor.name;
+  }
+}
+class UniqueIntegrityConstraintViolationError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = this.constructor.name;
+  }
+}
+
 class DB {
-  constructor (bee) {
+  constructor(bee) {
     this.bee = bee
     this.collections = new Map()
   }
 
-  collection (name) {
+  collection(name) {
     if (!this.collections.has(name)) {
       const sub = this.bee.sub(name)
       const collection = new Collection(name, sub)
@@ -58,14 +71,14 @@ class DB {
     return this.collections.get(name)
   }
 
-  async close () {
+  async close() {
     // TODO: This looks kinda stange. PR a close method on bee?
     return this.bee.close()
   }
 }
 
 class Collection {
-  constructor (name, bee) {
+  constructor(name, bee) {
     this.name = name
     this.bee = bee
     this.docs = bee.sub('doc')
@@ -73,9 +86,9 @@ class Collection {
     this.idx = bee.sub('idx')
   }
 
-  async insert (rawDoc) {
+  async insert(rawDoc) {
     let doc = rawDoc
-    if (!doc) throw new TypeError('No Document Supplied')
+    if (!doc) throw new NoDocumentSuppliedError('No Document Supplied')
     if (!doc._id) {
       doc = {
         ...doc,
@@ -88,7 +101,7 @@ class Collection {
 
     const exists = await this.docs.get(key)
 
-    if (exists) throw new Error('Duplicate Key error, try using .update?')
+    if (exists) throw new UniqueIntegrityConstraintViolationError('Duplicate Key error, try using .update?')
 
     const value = BSON.serialize(doc)
 
@@ -106,7 +119,7 @@ class Collection {
     return doc
   }
 
-  async update (query = {}, update = {}, options = {}) {
+  async update(query = {}, update = {}, options = {}) {
     const { upsert = false, multi = false, hint = null } = options
 
     let nMatched = 0
@@ -162,7 +175,7 @@ class Collection {
     }
   }
 
-  async delete (query = {}, options = {}) {
+  async delete(query = {}, options = {}) {
     const { multi = false, hint = null } = options
 
     let nDeleted = 0
@@ -193,7 +206,7 @@ class Collection {
     }
   }
 
-  async findOne (query = {}) {
+  async findOne(query = {}) {
     const results = await this.find(query).limit(1)
 
     const [doc] = results
@@ -203,11 +216,11 @@ class Collection {
     return doc
   }
 
-  find (query = {}) {
+  find(query = {}) {
     return new Cursor(query, this)
   }
 
-  async createIndex (
+  async createIndex(
     fields,
     { rebuild = false, version = INDEX_VERSION, ...opts } = {}
   ) {
@@ -237,18 +250,18 @@ class Collection {
     return name
   }
 
-  async indexExists (name) {
+  async indexExists(name) {
     const exists = await this.idxs.get(name)
     return exists !== null
   }
 
-  async getIndex (name) {
+  async getIndex(name) {
     const data = await this.idxs.get(name)
     if (!data) throw new Error('Invalid index')
     return BSON.deserialize(data.value)
   }
 
-  async reIndex (name) {
+  async reIndex(name) {
     const { fields } = await this.getIndex(name)
     // TODO: Cache index subs
     const bee = this.idx.sub(name)
@@ -259,7 +272,7 @@ class Collection {
   }
 
   // This is a private API, don't depend on it
-  async _indexDocument (bee, fields, doc) {
+  async _indexDocument(bee, fields, doc) {
     if (!hasFields(doc, fields)) return
     const idxValue = doc._id.id
 
@@ -273,7 +286,7 @@ class Collection {
     await batch.flush()
   }
 
-  async _deIndexDocument (bee, fields, doc) {
+  async _deIndexDocument(bee, fields, doc) {
     if (!hasFields(doc, fields)) return
 
     const batch = bee.batch()
@@ -287,7 +300,7 @@ class Collection {
   }
 
   // TODO: Cache indexes?
-  async listIndexes () {
+  async listIndexes() {
     const stream = this.idxs.createReadStream()
     const indexes = []
 
@@ -301,7 +314,7 @@ class Collection {
 }
 
 class Cursor {
-  constructor (
+  constructor(
     query = {},
     collection,
     opts = {
@@ -317,7 +330,7 @@ class Cursor {
     this.opts = opts
   }
 
-  async count () {
+  async count() {
     let count = 0
     // Item isn't being used but eslint will complain about it
     for await (const item of this) { // eslint-disable-line
@@ -327,19 +340,19 @@ class Cursor {
     return count
   }
 
-  hint (hint) {
+  hint(hint) {
     return new Cursor(this.query, this.collection, { ...this.opts, hint })
   }
 
-  limit (limit) {
+  limit(limit) {
     return new Cursor(this.query, this.collection, { ...this.opts, limit })
   }
 
-  skip (skip) {
+  skip(skip) {
     return new Cursor(this.query, this.collection, { ...this.opts, skip })
   }
 
-  sort (field, direction = 1) {
+  sort(field, direction = 1) {
     return new Cursor(this.query, this.collection, {
       ...this.opts,
       sort: {
@@ -349,7 +362,7 @@ class Cursor {
     })
   }
 
-  async getIndex () {
+  async getIndex() {
     const { sort, hint } = this.opts
     const query = this.query
 
@@ -433,7 +446,7 @@ class Cursor {
     }
   }
 
-  async then (resolve, reject) {
+  async then(resolve, reject) {
     try {
       const results = []
       for await (const item of this) {
@@ -445,7 +458,7 @@ class Cursor {
     }
   }
 
-  async * [Symbol.asyncIterator] () {
+  async *[Symbol.asyncIterator]() {
     if (this.query._id && this.query._id instanceof ObjectID) {
       // Doc IDs are unique, so we can query against them without doing a search
       const key = this.query._id.id
@@ -477,7 +490,7 @@ class Cursor {
 
       const bestIndex = await this.getIndex()
 
-      function processDoc (doc) {
+      function processDoc(doc) {
         let shouldYield = null
         let shouldBreak = false
 
@@ -579,7 +592,7 @@ class Cursor {
   }
 }
 
-function performUpdate (doc, update) {
+function performUpdate(doc, update) {
   if (Array.isArray(update)) {
     return update.reduce(performUpdate, doc)
   }
@@ -594,7 +607,7 @@ function performUpdate (doc, update) {
   return newDoc
 }
 
-function matchesQuery (doc, query) {
+function matchesQuery(doc, query) {
   for (const key of Object.keys(query)) {
     const queryValue = query[key]
     const docValue = doc[key]
@@ -603,7 +616,7 @@ function matchesQuery (doc, query) {
   return true
 }
 
-function queryCompare (docValue, queryValue) {
+function queryCompare(docValue, queryValue) {
   if (isQueryObject(queryValue)) {
     for (const queryType of Object.keys(queryValue)) {
       const compare = QUERY_TYPES[queryType]
@@ -615,7 +628,7 @@ function queryCompare (docValue, queryValue) {
   } else return compareEq(docValue, queryValue)
 }
 
-function compareAll (docValue, queryValue) {
+function compareAll(docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
   if (!Array.isArray(queryValue)) {
     throw new Error('$all must be set to an array')
@@ -629,7 +642,7 @@ function compareAll (docValue, queryValue) {
   }
 }
 
-function compareIn (docValue, queryValue) {
+function compareIn(docValue, queryValue) {
   // TODO: Add query validator function to detect this early.
   if (!Array.isArray(queryValue)) {
     throw new Error('$in must be set to an array')
@@ -643,32 +656,32 @@ function compareIn (docValue, queryValue) {
   }
 }
 
-function compareGt (docValue, queryValue) {
+function compareGt(docValue, queryValue) {
   return ensureComparable(docValue) > ensureComparable(queryValue)
 }
 
-function compareLt (docValue, queryValue) {
+function compareLt(docValue, queryValue) {
   return ensureComparable(docValue) < ensureComparable(queryValue)
 }
 
-function compareGte (docValue, queryValue) {
+function compareGte(docValue, queryValue) {
   return ensureComparable(docValue) >= ensureComparable(queryValue)
 }
 
-function compareLte (docValue, queryValue) {
+function compareLte(docValue, queryValue) {
   return ensureComparable(docValue) <= ensureComparable(queryValue)
 }
 
-function compareNe (docValue, queryValue) {
+function compareNe(docValue, queryValue) {
   return ensureComparable(docValue) !== ensureComparable(queryValue)
 }
 
-function ensureComparable (value) {
+function ensureComparable(value) {
   if (value instanceof Date) return value.getTime()
   return value
 }
 
-function compareEq (docValue, queryValue) {
+function compareEq(docValue, queryValue) {
   if (Array.isArray(docValue)) {
     return docValue.some((item) => compareEq(item, queryValue))
   } else if (typeof docValue?.equals === 'function') {
@@ -678,11 +691,11 @@ function compareEq (docValue, queryValue) {
   }
 }
 
-function compareExists (docValue, queryValue) {
+function compareExists(docValue, queryValue) {
   return (docValue !== undefined) === queryValue
 }
 
-function updatePull (doc, fields) {
+function updatePull(doc, fields) {
   for (const key of Object.keys(fields)) {
     const value = doc[key]
     if (!Array.isArray(value)) continue
@@ -692,7 +705,7 @@ function updatePull (doc, fields) {
   }
 }
 
-function updatePop (doc, fields) {
+function updatePop(doc, fields) {
   for (const key of Object.keys(fields)) {
     const value = doc[key]
     if (!Array.isArray(value)) continue
@@ -705,7 +718,7 @@ function updatePop (doc, fields) {
   }
 }
 
-function updatePush (doc, fields) {
+function updatePush(doc, fields) {
   for (const key of Object.keys(fields)) {
     const toPush = fields[key]
     if (!(key in doc)) {
@@ -725,7 +738,7 @@ function updatePush (doc, fields) {
   }
 }
 
-function updateAddToSet (doc, fields) {
+function updateAddToSet(doc, fields) {
   for (const key of Object.keys(fields)) {
     if (!(key in doc)) {
       doc[key] = fields[key]
@@ -745,19 +758,19 @@ function updateAddToSet (doc, fields) {
   }
 }
 
-function updateUnset (doc, fields) {
+function updateUnset(doc, fields) {
   for (const key of Object.keys(fields)) {
     delete doc[key]
   }
 }
 
-function updateSet (doc, fields) {
+function updateSet(doc, fields) {
   for (const key of Object.keys(fields)) {
     doc[key] = fields[key]
   }
 }
 
-function updateRename (doc, fields) {
+function updateRename(doc, fields) {
   for (const key of Object.keys(fields)) {
     if (!(key in doc)) continue
     const name = fields[key]
@@ -767,7 +780,7 @@ function updateRename (doc, fields) {
   }
 }
 
-function updateInc (doc, fields) {
+function updateInc(doc, fields) {
   for (const key of Object.keys(fields)) {
     const value = fields[key]
     if (!(key in doc)) {
@@ -778,7 +791,7 @@ function updateInc (doc, fields) {
   }
 }
 
-function updateMul (doc, fields) {
+function updateMul(doc, fields) {
   for (const key of Object.keys(fields)) {
     const value = fields[key]
     if (!(key in doc)) {
@@ -789,11 +802,11 @@ function updateMul (doc, fields) {
   }
 }
 
-function hasFields (doc, fields) {
+function hasFields(doc, fields) {
   return fields.every((field) => field in doc && field !== undefined)
 }
 
-function makeIndexKeyV1 (doc, fields) {
+function makeIndexKeyV1(doc, fields) {
   // TODO: Does BSON array work well for ordering?
   // TODO: Maybe use a custom encoding?
   // Serialize the data into a BSON array
@@ -811,7 +824,7 @@ function makeIndexKeyV1 (doc, fields) {
   return noPrefix
 }
 
-function makeDocFromIndexV1 (key, fields) {
+function makeDocFromIndexV1(key, fields) {
   const buffer = Buffer.alloc(key.length + 4)
   key.copy(buffer, 4)
   // Write a valid length prefix to the buffer for BSON decoding
@@ -829,7 +842,7 @@ function makeDocFromIndexV1 (key, fields) {
   return doc
 }
 
-function makeIndexKeyV2 (doc, fields, allFields = fields) {
+function makeIndexKeyV2(doc, fields, allFields = fields) {
   // CBOR encode fields
   const keyValues = fields.map((field) => {
     const value = doc[field]
@@ -860,7 +873,7 @@ function makeIndexKeyV2 (doc, fields, allFields = fields) {
   return key
 }
 
-function makeDocFromIndexV2 (key, fields) {
+function makeDocFromIndexV2(key, fields) {
   // CBOR decode fields
   const decoded = cbor.decode(key)
   const doc = {}
@@ -881,7 +894,7 @@ function makeDocFromIndexV2 (key, fields) {
   return doc
 }
 
-function getSubset (doc, fields) {
+function getSubset(doc, fields) {
   return fields.reduce((res, field) => {
     if (field in doc) {
       res[field] = doc[field]
@@ -890,7 +903,7 @@ function getSubset (doc, fields) {
   }, {})
 }
 
-function * flattenDocument (doc, fields) {
+function* flattenDocument(doc, fields) {
   let hadArray = false
 
   for (const key of fields) {
@@ -913,7 +926,7 @@ function * flattenDocument (doc, fields) {
   if (!hadArray) yield doc
 }
 
-function makeIndexKeyFromQuery (query, fields, indexFields, makeIndexKey) {
+function makeIndexKeyFromQuery(query, fields, indexFields, makeIndexKey) {
   // TODO: Account for $eq and $gt fields
   const doc = fields.reduce((res, field) => {
     const value = query[field]
@@ -934,15 +947,15 @@ function makeIndexKeyFromQuery (query, fields, indexFields, makeIndexKey) {
   return makeIndexKey(doc, fields, indexFields)
 }
 
-function isQueryObject (object) {
+function isQueryObject(object) {
   return typeof object === 'object' && has$Keys(object)
 }
 
-function has$Keys (object) {
+function has$Keys(object) {
   return Object.keys(object).some((key) => key.startsWith('$'))
 }
 
-function consecutiveSubset (origin, values) {
+function consecutiveSubset(origin, values) {
   let counter = 0
   for (const item of origin) {
     if (!values.includes(item)) return counter
