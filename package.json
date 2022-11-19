@@ -1,15 +1,15 @@
 {
-  "name": "hyperbeedeebee",
-  "version": "2.0.0",
+  "name": "hyperdeebee",
+  "version": "2.0.1",
   "description": "A MongoDB-like database built on top of Hyperbee with support for indexing",
   "main": "index.js",
   "scripts": {
     "lint": "standard --fix",
-    "test": "npm run lint && node ./test.js"
+    "test": "npm run lint && node ./test.js && node ./test_autobee.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RangerMauve/hyperbeedeebee.git"
+    "url": "git+https://github.com/Jampard/hyperdeebee.git"
   },
   "keywords": [
     "hyperbee",
@@ -24,14 +24,17 @@
     "url": "https://github.com/RangerMauve/hyperbeedeebee/issues"
   },
   "homepage": "https://github.com/RangerMauve/hyperbeedeebee#readme",
+  "types": "index.d.ts",
   "dependencies": {
     "bson": "^4.3.0",
     "cbor": "^8.1.0"
   },
   "devDependencies": {
-    "hyperbee": "^1.5.4",
-    "hypercore": "^9.9.1",
-    "random-access-memory": "^3.1.2",
+    "autobase": "https://github.com/hypercore-protocol/autobase",
+    "b4a": "^1.6.0",
+    "hyperbee": "^2.0.0",
+    "hypercore": "^10.2.0",
+    "random-access-memory": "^5.0.0",
     "standard": "^16.0.3",
     "tape": "^5.2.2"
   }
