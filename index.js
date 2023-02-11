@@ -1,5 +1,5 @@
 const BSON = require('bson')
-const { ObjectID } = BSON
+const { ObjectId } = BSON
 const cbor = require('cbor')
 
 // Version of the indexing algorithm
@@ -78,7 +78,7 @@ class Collection {
     if (!doc._id) {
       doc = {
         ...doc,
-        _id: new ObjectID()
+        _id: new ObjectId()
       }
     }
 
@@ -401,7 +401,7 @@ class Cursor {
   }
 
   async * [Symbol.asyncIterator] () {
-    if (this.query._id && (this.query._id instanceof ObjectID)) {
+    if (this.query._id && (this.query._id instanceof ObjectId)) {
       // Doc IDs are unique, so we can query against them without doing a search
       const key = this.query._id.id
 
@@ -773,8 +773,8 @@ function makeIndexKeyV2 (doc, fields, allFields = fields) {
   // CBOR encode fields
   const keyValues = fields.map((field) => {
     const value = doc[field]
-    // Detect ObjectID
-    if (value instanceof ObjectID) {
+    // Detect ObjectId
+    if (value instanceof ObjectId) {
       return value.id
     }
     return value
@@ -809,7 +809,7 @@ function makeDocFromIndexV2 (key, fields) {
     const field = fields[index] || '_id'
     if (Buffer.isBuffer(value) && value.length === 12) {
       try {
-        doc[field] = new ObjectID(value)
+        doc[field] = new ObjectId(value)
       } catch {
         doc[field] = value
       }
