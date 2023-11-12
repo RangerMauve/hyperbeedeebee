@@ -41,6 +41,26 @@ const UPDATE_TYPES = {
   $push: updatePush
 }
 
+/**
+ * Parse sort key.
+ *
+ * @param {String} key
+ * @return {Array}
+ * @type private
+ */
+
+function parseSort (key = '') {
+  if (Array.isArray(key)) {
+    const keys = key.map(parseSort)
+    return Object.assign(...keys)
+  }
+
+  const [sign] = key.match(/^[+-]/) || []
+  if (sign) key = key.substring(1)
+  const dir = sign === '-' ? -1 : 1
+  return [key, dir]
+}
+
 class DB {
   constructor (bee) {
     this.bee = bee
@@ -70,6 +90,18 @@ class Collection {
     this.docs = bee.sub('doc')
     this.idxs = bee.sub('idxs')
     this.idx = bee.sub('idx')
+  }
+
+  async insertOne (data) {
+    const doc = await this.insert(data)
+    return Object.assign(data, doc)
+  }
+
+  async insertMany (data) {
+    for (const item of data) {
+      await this.insertOne(item)
+    }
+    return data
   }
 
   async insert (rawDoc) {
@@ -103,6 +135,16 @@ class Collection {
     }
 
     return doc
+  }
+
+  async updateOne (query = {}, data, options) {
+    await this.update(query, data, options)
+    return this.findOne(query)
+  }
+
+  async updateMany (query = {}, data, options) {
+    await this.update(query, data, options)
+    return this.findMany(query)
   }
 
   async update (query = {}, update = {}, options = {}) {
@@ -165,12 +207,13 @@ class Collection {
 
   async findOne (query = {}) {
     const results = await (this.find(query).limit(1))
-
     const [doc] = results
+    return doc || null
+  }
 
-    if (!doc) throw new Error('not found')
-
-    return doc
+  findMany = async (query, { sort = null } = {}) => {
+    const q = this.find(query)
+    return sort ? q.sort(...parseSort(sort)) : q
   }
 
   find (query = {}) {
