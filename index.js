@@ -41,26 +41,6 @@ const UPDATE_TYPES = {
   $push: updatePush
 }
 
-/**
- * Parse sort key.
- *
- * @param {String} key
- * @return {Array}
- * @type private
- */
-
-function parseSort (key = '') {
-  if (Array.isArray(key)) {
-    const keys = key.map(parseSort)
-    return Object.assign(...keys)
-  }
-
-  const [sign] = key.match(/^[+-]/) || []
-  if (sign) key = key.substring(1)
-  const dir = sign === '-' ? -1 : 1
-  return [key, dir]
-}
-
 class DB {
   constructor (bee) {
     this.bee = bee
@@ -211,7 +191,7 @@ class Collection {
     return doc || null
   }
 
-  findMany = async (query, { sort = null } = {}) => {
+  findMany (query, { sort = null } = {}) {
     const q = this.find(query)
     return sort ? q.sort(...parseSort(sort)) : q
   }
@@ -572,6 +552,18 @@ class Cursor {
       }
     }
   }
+}
+
+function parseSort (key = '') {
+  if (Array.isArray(key)) {
+    const keys = key.map(parseSort)
+    return Object.assign(...keys)
+  }
+
+  const [sign] = key.match(/^[+-]/) || []
+  if (sign) key = key.substring(1)
+  const dir = sign === '-' ? -1 : 1
+  return [key, dir]
 }
 
 function performUpdate (doc, update) {
