@@ -6,7 +6,8 @@ const HyperbeeDeeBee = require('./')
 const { DB } = HyperbeeDeeBee
 
 function getBee () {
-  return new Hyperbee(new Hypercore(RAM))
+  const core = new Hypercore(RAM)
+  return new Hyperbee(core, { extension: false })
 }
 
 test('Create a document in a collection', async (t) => {
